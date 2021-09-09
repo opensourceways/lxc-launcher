@@ -29,10 +29,7 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "$HOME/.lxc-launcher.yaml", "config file")
-	rootCmd.PersistentFlags().StringVar(&lxdSocketFile, "lxd-socket-file", "/var/lib/lxd/unix.socket",
-		"name of socket file to communicate to lxd server")
 	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("lxd-socket-file", rootCmd.PersistentFlags().Lookup("lxd-socket-file"))
 }
 
 func initConfig() {

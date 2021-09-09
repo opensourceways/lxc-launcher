@@ -13,8 +13,6 @@ var Logger *zap.Logger
 func InitLog(debug bool) {
 	//we currently only log into stdout/stderr
 	newGenericLogger(debug)
-
-	Logger.Info("logger construction succeeded")
 }
 
 func newGenericLogger(debug bool) {
