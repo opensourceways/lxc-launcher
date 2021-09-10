@@ -152,6 +152,7 @@ func handleLaunch(cmd *cobra.Command, args []string) error {
 	if err := createInstance(cmd, args); err != nil {
 		return err
 	}
+	//start proxy if needed
 	if len(instanceSocket) != 0 {
 		networkProxy, err = network.NewProxy(instName, "0.0.0.0", exposePort, instanceSocket, log.Logger)
 		if err != nil {

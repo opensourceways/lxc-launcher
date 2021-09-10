@@ -200,6 +200,7 @@ func (c *Client) LaunchInstance(name string) error {
 }
 
 func (c *Client) StopInstance(name string, alsoDelete bool) error {
+	c.logger.Info(fmt.Sprintf("start to delete instance %s", name))
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
