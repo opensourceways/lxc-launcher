@@ -6,11 +6,14 @@ import (
 	"github.com/opensourceways/lxc-launcher/log"
 	"github.com/opensourceways/lxc-launcher/lxd"
 	"github.com/opensourceways/lxc-launcher/network"
+	"github.com/opensourceways/lxc-launcher/task"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var (
@@ -31,6 +34,9 @@ var (
 	lxdClient        *lxd.Client
 	additionalConfig []string
 	networkProxy     *network.Proxy
+	prober           *task.Prober
+	statusPort       int32
+	statusServer     *http.Server
 )
 
 func init() {
@@ -47,6 +53,7 @@ func init() {
 	launchCommand.PersistentFlags().Int32Var(&exposePort, "expose-port", 8080, "Expose port for lxc proxy address")
 	launchCommand.PersistentFlags().StringArrayVar(&additionalConfig, "additional-config", []string{}, "Additional config for lxd instance, in the format of `--additional-config key=value`")
 	launchCommand.PersistentFlags().BoolVar(&removeExisting, "remove-existing", true, "Whether to remove existing lxc instance")
+	launchCommand.PersistentFlags().Int32Var(&statusPort, "status-port", 8082, "health server port")
 	launchCommand.MarkPersistentFlagRequired("lxd-socket")
 	launchCommand.MarkPersistentFlagRequired("storage-pool")
 	rootCmd.AddCommand(launchCommand)
@@ -139,6 +146,12 @@ func Cleanup() {
 	if networkProxy != nil {
 		networkProxy.Close()
 	}
+	if prober != nil {
+		prober.Close()
+	}
+	if statusServer != nil {
+		statusServer.Close()
+	}
 	if len(instName) != 0 && lxdClient != nil {
 		if err := lxdClient.StopInstance(instName, true); err != nil {
 			log.Logger.Error(fmt.Sprintf("failed to clean up lxd instance %s, %s", instName, err))
@@ -159,12 +172,47 @@ func handleLaunch(cmd *cobra.Command, args []string) error {
 			Cleanup()
 			return err
 		}
-		//watch signal
+		//watch instance status
+		prober, err = task.NewProber(instName, lxdClient, 5, log.Logger)
+		if err != nil {
+			Cleanup()
+			return err
+		}
+		// start health status
+		go prober.StartLoop()
+		go serverHealth()
+		//watch os signal
 		listenSignals()
 		//start proxying
 		networkProxy.StartLoop()
 	}
 	return nil
+}
+
+func statusHandler(w http.ResponseWriter, req *http.Request) {
+	if prober.Alive() {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf("instance %s alive", instName)))
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("instance %s go dead", instName)))
+	}
+}
+
+func serverHealth() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", statusHandler)
+	statusServer := http.Server{
+		Addr: fmt.Sprintf("0.0.0.0:%d", statusPort),
+		Handler: mux,
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   5 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	err := statusServer.ListenAndServe()
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("failed to setup status server %v", err))
+	}
 }
 
 // listenSignals Graceful start/stop server

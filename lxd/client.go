@@ -275,3 +275,11 @@ func (c *Client) CheckInstanceExists(name string, containerOnly bool) (bool, err
 	}
 	return false, nil
 }
+
+func (c *Client) GetInstanceStatus(name string) (string, error) {
+	instance, _, err := c.instServer.GetInstance(name)
+	if err != nil {
+		return "", err
+	}
+	return instance.Status, nil
+}
