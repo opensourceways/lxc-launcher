@@ -1,9 +1,9 @@
 package main
 
 import (
-   "github.com/opensourceways/lxc-launcher/cmd"
+	"github.com/opensourceways/lxc-launcher/cmd"
 )
 
 func main() {
-   cmd.Execute()
+	cmd.Execute()
 }

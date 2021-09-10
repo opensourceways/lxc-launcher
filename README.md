@@ -1,7 +1,8 @@
-# lxc-launcher
+# Lxc-launcher
 We can't integrate lxc/lxd into kubernetes due to the Image and Runtime spec difference,
 this project acts as a lxc instance agent in kubernetes which responsible for lxc instance lifecycle management as well
 as the network proxy.
+
 # Requirement
 1. lxd server
 2. socat package

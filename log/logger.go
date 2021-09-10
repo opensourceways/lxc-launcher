@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-
 // Logger instance
 var Logger *zap.Logger
 

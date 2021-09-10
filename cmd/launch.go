@@ -5,29 +5,37 @@ import (
 	"fmt"
 	"github.com/opensourceways/lxc-launcher/log"
 	"github.com/opensourceways/lxc-launcher/lxd"
+	"github.com/opensourceways/lxc-launcher/network"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
-	instName string
-	lxcImage string
-	cpuResource string
-	memoryResource string
-	storagePool string
-	rootSize string
-	ingressLimit string
-	egressLimit string
-	proxyAddress string
-	mountFiles []string
-	exposePort int32
-	removeExisting  bool
-	lxdSocket string
-	lxdClient *lxd.Client
+	instName         string
+	lxcImage         string
+	cpuResource      string
+	memoryResource   string
+	storagePool      string
+	rootSize         string
+	ingressLimit     string
+	egressLimit      string
+	proxyAddress     string
+	mountFiles       []string
+	exposePort       int32
+	removeExisting   bool
+	instanceSocket   string
+	lxdSocket        string
+	lxdClient        *lxd.Client
+	additionalConfig []string
+	networkProxy     *network.Proxy
 )
 
 func init() {
 	launchCommand.PersistentFlags().StringVar(&lxdSocket, "lxd-socket", "", "lxd socket file for communicating")
+	launchCommand.PersistentFlags().StringVar(&instanceSocket, "instance-socket", "", "instance socket file for communicating")
 	launchCommand.PersistentFlags().StringVar(&cpuResource, "cpu-resource", "", "CPU limitation of lxc instance")
 	launchCommand.PersistentFlags().StringVar(&memoryResource, "memory-resource", "", "Memory limitation of lxc instance")
 	launchCommand.PersistentFlags().StringVar(&storagePool, "storage-pool", "", "Storage pool for lxc instance")
@@ -37,6 +45,7 @@ func init() {
 	launchCommand.PersistentFlags().StringVar(&proxyAddress, "proxy-address", "", "Proxy address, used to forward requests to lxc instance. empty means no forwarding")
 	launchCommand.PersistentFlags().StringArrayVar(&mountFiles, "mount-files", []string{}, "Mount files into instance in the format of <source>:<destination>")
 	launchCommand.PersistentFlags().Int32Var(&exposePort, "expose-port", 8080, "Expose port for lxc proxy address")
+	launchCommand.PersistentFlags().StringArrayVar(&additionalConfig, "additional-config", []string{}, "Additional config for lxd instance, in the format of `--additional-config key=value`")
 	launchCommand.PersistentFlags().BoolVar(&removeExisting, "remove-existing", true, "Whether to remove existing lxc instance")
 	launchCommand.MarkPersistentFlagRequired("lxd-socket")
 	launchCommand.MarkPersistentFlagRequired("storage-pool")
@@ -44,12 +53,12 @@ func init() {
 }
 
 var launchCommand = &cobra.Command{
-	Use:   "launch <instance-name> <image-alias-name>",
-	Short: "Launch a lxc instance with specification",
-	Long:  `Launch a lxc instance with specification`,
-	Args: cobra.ExactArgs(2),
+	Use:     "launch <instance-name> <image-alias-name>",
+	Short:   "Launch a lxc instance with specification",
+	Long:    `Launch a lxc instance with specification`,
+	Args:    cobra.ExactArgs(2),
 	PreRunE: validateLaunch,
-	RunE: handleLaunch,
+	RunE:    handleLaunch,
 }
 
 func validateLaunch(cmd *cobra.Command, args []string) error {
@@ -69,7 +78,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 
 	log.Logger.Info(fmt.Sprintf("start to validate resource limit on instance %s", instName))
 	if err = lxdClient.ValidateResourceLimit(
-		egressLimit, ingressLimit, rootSize, memoryResource, cpuResource); err != nil {
+		egressLimit, ingressLimit, rootSize, memoryResource, cpuResource, additionalConfig); err != nil {
 		return err
 	}
 	log.Logger.Info(fmt.Sprintf("start to check image %s existence", lxcImage))
@@ -89,7 +98,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 	if len(storagePool) == 0 {
 		return errors.New("please specify storage pool name")
 	}
-	if existed, err := lxdClient.CheckPoolExists(storagePool); err != nil  || !existed {
+	if existed, err := lxdClient.CheckPoolExists(storagePool); err != nil || !existed {
 		if err != nil {
 			return err
 		}
@@ -97,7 +106,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 	}
 	if instanceExists && removeExisting {
 		log.Logger.Info(fmt.Sprintf("start to remove lxc instance %s due to existence", instName))
-		err = lxdClient.DeleteInstance(instName)
+		err = lxdClient.StopInstance(instName, true)
 		if err != nil {
 			return err
 		}
@@ -126,14 +135,59 @@ func createInstance(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func Cleanup() {
+	if networkProxy != nil {
+		networkProxy.Close()
+	}
+	if len(instName) != 0 && lxdClient != nil {
+		if err := lxdClient.StopInstance(instName, true); err != nil {
+			log.Logger.Error(fmt.Sprintf("failed to clean up lxd instance %s, %s", instName, err))
+		}
+	}
+}
+
 func handleLaunch(cmd *cobra.Command, args []string) error {
-	//Steps to launch&proxying lxc instance
-	//1. create and wait ready
-	//2. create signal handler
-	//3. proxying
+	var err error
+	// create and wait instance ready
 	if err := createInstance(cmd, args); err != nil {
 		return err
 	}
-
+	if len(instanceSocket) != 0 {
+		networkProxy, err = network.NewProxy(instName, "0.0.0.0", exposePort, instanceSocket, log.Logger)
+		if err != nil {
+			Cleanup()
+			return err
+		}
+		//watch signal
+		listenSignals()
+		//start proxying
+		networkProxy.StartLoop()
+	}
 	return nil
+}
+
+// listenSignals Graceful start/stop server
+func listenSignals() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go handleSignals(sigChan)
+}
+
+// handleSignals handle process signal
+func handleSignals(c chan os.Signal) {
+	log.Logger.Info("Notice: System signal monitoring is enabled(watch: SIGINT,SIGTERM,SIGQUIT)\n")
+
+	switch <-c {
+	case syscall.SIGINT:
+		log.Logger.Info("\nShutdown by Ctrl+C")
+	case syscall.SIGTERM:
+		log.Logger.Info("\nShutdown quickly")
+	case syscall.SIGQUIT:
+		log.Logger.Info("\nShutdown gracefully")
+	}
+
+	//kill proxy process and kill lxd instance
+	Cleanup()
+	os.Exit(0)
 }

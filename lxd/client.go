@@ -3,6 +3,7 @@ package lxd
 import (
 	"errors"
 	"fmt"
+	"github.com/opensourceways/lxc-launcher/util"
 	"go.uber.org/zap"
 	"strconv"
 	"strings"
@@ -14,8 +15,8 @@ import (
 const (
 	STATUS_RUNNING = "Running"
 
-	ACTION_STOP = "stop"
-	ACTION_START = "start"
+	ACTION_STOP       = "stop"
+	ACTION_START      = "start"
 	SOURCE_TYPE_IMAGE = "image"
 )
 
@@ -26,9 +27,10 @@ type ResourceLimit struct {
 }
 
 type Client struct {
-	instServer lxd.InstanceServer
-	logger  *zap.Logger
-	ResourceLimits []ResourceLimit
+	instServer   lxd.InstanceServer
+	logger       *zap.Logger
+	DeviceLimits map[string]map[string]string
+	Configs      map[string]string
 }
 
 func NewClient(socket string, logger *zap.Logger) (*Client, error) {
@@ -37,21 +39,21 @@ func NewClient(socket string, logger *zap.Logger) (*Client, error) {
 		return nil, errors.New(fmt.Sprintf("failed to connect lxd server via socket file, %s", err))
 	}
 	return &Client{
-		instServer: instServer,
-		logger: logger,
+		instServer:   instServer,
+		logger:       logger,
+		Configs:      map[string]string{},
+		DeviceLimits: map[string]map[string]string{},
 	}, nil
 }
 
-func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memoryResource, cpuResource string) error {
+func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memoryResource,
+	cpuResource string, additionalConfig []string) error {
 	//egress limitation
+	c.DeviceLimits["eth0"] = map[string]string{}
 	if len(egressLimit) != 0 {
 		if strings.HasSuffix(egressLimit, "Mbit") || strings.HasSuffix(
 			egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "eth0",
-				Name: "limits.egress",
-				Value: egressLimit,
-			})
+			c.DeviceLimits["eth0"]["limits.egress"] = egressLimit
 		} else {
 			return errors.New(fmt.Sprintf("instance network egress limitation %s incorrect", egressLimit))
 		}
@@ -59,25 +61,18 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memo
 	//ingress limitation
 	if len(ingressLimit) != 0 {
 		if strings.HasSuffix(ingressLimit, "Mbit") || strings.HasSuffix(
-			ingressLimit, "Gbit") || strings.HasSuffix(ingressLimit, "Tbit"){
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "eth0",
-				Name: "limits.ingress",
-				Value: ingressLimit,
-			})
+			ingressLimit, "Gbit") || strings.HasSuffix(ingressLimit, "Tbit") {
+			c.DeviceLimits["eth0"]["limits.ingress"] = ingressLimit
 		} else {
 			return errors.New(fmt.Sprintf("instance network ingress limitation %s incorrect", ingressLimit))
 		}
 	}
 	//root size
+	c.DeviceLimits["root"] = map[string]string{}
 	if len(rootSize) != 0 {
 		if strings.HasSuffix(rootSize, "MB") || strings.HasSuffix(
 			rootSize, "GB") || strings.HasSuffix(rootSize, "TB") {
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "root",
-				Name: "size",
-				Value: rootSize,
-			})
+			c.DeviceLimits["root"]["size"] = rootSize
 		} else {
 			return errors.New(fmt.Sprintf("instance storage size limitation %s incorrect", rootSize))
 		}
@@ -86,11 +81,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memo
 	if len(memoryResource) != 0 {
 		if strings.HasSuffix(memoryResource, "MB") || strings.HasSuffix(
 			memoryResource, "GB") || strings.HasSuffix(memoryResource, "TB") {
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "memory",
-				Name: "limits.memory",
-				Value: memoryResource,
-			})
+			c.Configs["limits.memory"] = memoryResource
 		} else {
 			return errors.New(fmt.Sprintf("instance memory limitation %s incorrect", memoryResource))
 		}
@@ -98,16 +89,8 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memo
 	//cpu limitation
 	if len(cpuResource) != 0 {
 		if strings.HasSuffix(cpuResource, "%") {
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "cpu",
-				Name: "limits.cpu",
-				Value: "1",
-			})
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "cpu",
-				Name: "limits.cpu.allowance",
-				Value: cpuResource,
-			})
+			c.Configs["limits.cpu"] = "1"
+			c.Configs["limits.cpu.allowance"] = cpuResource
 		} else {
 			core, err := strconv.Atoi(cpuResource)
 			if err != nil {
@@ -116,22 +99,33 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memo
 			if core < 1 {
 				return errors.New("cpu core must be equal or greater than 1")
 			}
-			c.ResourceLimits = append(c.ResourceLimits, ResourceLimit{
-				Device: "cpu",
-				Name: "limits.cpu",
-				Value: cpuResource,
-			})
+			c.Configs["limits.cpu"] = strconv.Itoa(core)
+		}
+	}
+	//additional config, for instance: security.nesting=true
+	for _, a := range additionalConfig {
+		if len(a) != 0 {
+			//value may contains equal symbol
+			arr := strings.SplitN(a, "=", 2)
+			if len(arr) == 2 {
+				c.Configs[arr[0]] = arr[1]
+			}
 		}
 	}
 	rlimits := "Instance resource limit: "
-	for _, l := range c.ResourceLimits {
-		rlimits += fmt.Sprintf("device:%s,name:%s,value:%s;", l.Device, l.Name, l.Value)
+	for k, v := range c.Configs {
+		rlimits += fmt.Sprintf("name:%s,value:%s;", k, v)
+	}
+	for k, v := range c.DeviceLimits {
+		for ik, iv := range v {
+			rlimits += fmt.Sprintf("device%s:name:%s,value:%s;", k, ik, iv)
+		}
 	}
 	c.logger.Info(rlimits)
 	return nil
 }
 
-func (c *Client)CheckPoolExists(name string) (bool, error) {
+func (c *Client) CheckPoolExists(name string) (bool, error) {
 	names, err := c.instServer.GetStoragePoolNames()
 	if err != nil {
 		return false, err
@@ -144,23 +138,56 @@ func (c *Client)CheckPoolExists(name string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client)LaunchInstance(name string) error {
+func (c *Client) ApplyResourceLimit(name string) error {
+	instance, etag, err := c.instServer.GetInstance(name)
+	if err != nil {
+		return err
+	}
+	req := api.InstancePut{
+		Config: util.MergeConfigs(instance.Config, c.Configs),
+	}
+	// Use expanded device if the instance device is empty
+	if len(instance.Devices) == 0 {
+		req.Devices = util.MergeDeviceConfigs(instance.ExpandedDevices, c.DeviceLimits)
+	} else {
+		req.Devices = util.MergeDeviceConfigs(instance.Devices, c.DeviceLimits)
+	}
+	c.logger.Info(fmt.Sprintf("perform instance %s resource limit %v", name, req))
+	op, err := c.instServer.UpdateInstance(name, req, etag)
+	if err != nil {
+		return err
+	}
+	return op.Wait()
+}
+
+func (c *Client) LaunchInstance(name string) error {
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
 	}
 	if instance.StatusCode == api.Running {
-		c.logger.Info(fmt.Sprintf("instance %s already running.", name))
-		return nil
+		c.logger.Info(fmt.Sprintf("instance %s already running. will stop it first", name))
+		err = c.StopInstance(name, false)
+		if err != nil {
+			return err
+		}
 	}
+	instance, etag, err = c.instServer.GetInstance(name)
 	if instance.StatusCode == api.Error || instance.StatusCode.IsFinal() {
 		return errors.New(fmt.Sprintf("instance %s in %s state", name, instance.Status))
 	}
+	//update instance config
+	c.logger.Info(fmt.Sprintf("update instance %s cpu&memory&disk quota", name))
+	err = c.ApplyResourceLimit(name)
+	if err != nil {
+		return err
+	}
+	c.logger.Info(fmt.Sprintf("start instance %s", name))
 	if instance.StatusCode == api.Stopped {
 		req := api.InstanceStatePut{
-			Action: ACTION_START,
-			Timeout: -1,
-			Force: true,
+			Action:   ACTION_START,
+			Timeout:  -1,
+			Force:    true,
 			Stateful: false,
 		}
 		op, err := c.instServer.UpdateInstanceState(name, req, etag)
@@ -172,16 +199,16 @@ func (c *Client)LaunchInstance(name string) error {
 	return nil
 }
 
-func (c *Client)DeleteInstance(name string) error {
-	instance,etag, err := c.instServer.GetInstance(name)
+func (c *Client) StopInstance(name string, alsoDelete bool) error {
+	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
 	}
 	if instance.Status == STATUS_RUNNING {
 		req := api.InstanceStatePut{
-			Action: ACTION_STOP,
-			Timeout: -1,
-			Force: true,
+			Action:   ACTION_STOP,
+			Timeout:  -1,
+			Force:    true,
 			Stateful: false,
 		}
 		op, err := c.instServer.UpdateInstanceState(name, req, etag)
@@ -193,18 +220,21 @@ func (c *Client)DeleteInstance(name string) error {
 			return err
 		}
 	}
-	op, err := c.instServer.DeleteInstance(name)
-	if err != nil {
-		return err
+	if alsoDelete {
+		op, err := c.instServer.DeleteInstance(name)
+		if err != nil {
+			return err
+		}
+		return op.Wait()
 	}
-	return op.Wait()
+	return nil
 }
 
 func (c *Client) CreateInstance(imageAlias string, instanceName string) error {
 	req := api.InstancesPost{
 		Name: instanceName,
 		Source: api.InstanceSource{
-			Type: SOURCE_TYPE_IMAGE ,
+			Type:  SOURCE_TYPE_IMAGE,
 			Alias: imageAlias,
 		},
 	}
@@ -228,7 +258,7 @@ func (c *Client) CheckImageByAlias(alias string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client)CheckInstanceExists(name string, containerOnly bool) (bool, error) {
+func (c *Client) CheckInstanceExists(name string, containerOnly bool) (bool, error) {
 	instanceType := api.InstanceTypeAny
 	if containerOnly {
 		instanceType = api.InstanceTypeContainer
@@ -244,5 +274,3 @@ func (c *Client)CheckInstanceExists(name string, containerOnly bool) (bool, erro
 	}
 	return false, nil
 }
-
-

@@ -14,9 +14,9 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of lxc launcher",
 	Long:  `Print the version number of lxc launcher`,
-	Run: handleVersion,
+	Run:   handleVersion,
 }
 
 func handleVersion(cmd *cobra.Command, args []string) {
-fmt.Println("Lxc Launcher 0.0.1")
+	fmt.Println("Lxc Launcher 0.0.1")
 }
