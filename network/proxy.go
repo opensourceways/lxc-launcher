@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/opensourceways/lxc-launcher/util"
-	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"os/exec"
 	"syscall"
@@ -27,9 +26,9 @@ type Proxy struct {
 }
 
 func NewProxy(instName, address string, port int32, watchSocket string, logger *zap.Logger) (*Proxy, error) {
-	if !fileutil.Exist(watchSocket) {
-		return nil, errors.New("watch socket file not exists")
-	}
+	//if !fileutil.Exist(watchSocket) {
+	//	return nil, errors.New("watch socket file not exists")
+	//}
 	socatBin, err := exec.LookPath("socat")
 	if err != nil {
 		return nil, errors.New("unable to find socat binary")

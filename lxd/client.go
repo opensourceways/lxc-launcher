@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	STATUS_RUNNING = "Running"
+	PROXY_DEVICE_NAME = "instance_network_proxy"
+	PROXY_SOCKET_MODE = "0666"
+	STATUS_RUNNING    = "Running"
 
 	ACTION_STOP       = "stop"
 	ACTION_START      = "start"
@@ -46,7 +48,7 @@ func NewClient(socket string, logger *zap.Logger) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memoryResource,
+func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, storagePool, memoryResource,
 	cpuResource string, additionalConfig []string) error {
 	//egress limitation
 	c.DeviceLimits["eth0"] = map[string]string{}
@@ -73,6 +75,9 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, memo
 		if strings.HasSuffix(rootSize, "MB") || strings.HasSuffix(
 			rootSize, "GB") || strings.HasSuffix(rootSize, "TB") {
 			c.DeviceLimits["root"]["size"] = rootSize
+			c.DeviceLimits["root"]["pool"] = storagePool
+			c.DeviceLimits["root"]["type"] = "disk"
+			c.DeviceLimits["root"]["path"] = "/"
 		} else {
 			return errors.New(fmt.Sprintf("instance storage size limitation %s incorrect", rootSize))
 		}
@@ -138,7 +143,8 @@ func (c *Client) CheckPoolExists(name string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client) ApplyResourceLimit(name string) error {
+func (c *Client) ApplyResourceLimitAndProxy(name string, instSocket string, proxyEndpoint string,
+	instEnvs []string) error {
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
@@ -146,11 +152,24 @@ func (c *Client) ApplyResourceLimit(name string) error {
 	req := api.InstancePut{
 		Config: util.MergeConfigs(instance.Config, c.Configs),
 	}
-	// Use expanded device if the instance device is empty
-	if len(instance.Devices) == 0 {
-		req.Devices = util.MergeDeviceConfigs(instance.ExpandedDevices, c.DeviceLimits)
-	} else {
-		req.Devices = util.MergeDeviceConfigs(instance.Devices, c.DeviceLimits)
+	//add environment if needed
+	if len(instEnvs) != 0 {
+		for _, e := range instEnvs {
+			envs := strings.SplitN(e, "=", 2)
+			req.Config[fmt.Sprintf("environment.%s", envs[0])] = envs[1]
+		}
+	}
+	// Use expanded device for resource update
+	req.Devices = util.MergeDeviceConfigs(instance.ExpandedDevices, c.DeviceLimits)
+	//add proxy if needed
+	if len(instSocket) != 0 && len(proxyEndpoint) != 0 {
+		if _, ok := req.Devices[PROXY_DEVICE_NAME]; !ok {
+			req.Devices[PROXY_DEVICE_NAME] = map[string]string{}
+		}
+		req.Devices[PROXY_DEVICE_NAME]["connect"] = proxyEndpoint
+		req.Devices[PROXY_DEVICE_NAME]["type"] = "proxy"
+		req.Devices[PROXY_DEVICE_NAME]["mode"] = PROXY_SOCKET_MODE
+		req.Devices[PROXY_DEVICE_NAME]["listen"] = fmt.Sprintf("unix:%s", instSocket)
 	}
 	c.logger.Info(fmt.Sprintf("perform instance %s resource limit %v", name, req))
 	op, err := c.instServer.UpdateInstance(name, req, etag)
@@ -160,7 +179,8 @@ func (c *Client) ApplyResourceLimit(name string) error {
 	return op.Wait()
 }
 
-func (c *Client) LaunchInstance(name string) error {
+func (c *Client) LaunchInstance(name string, instSocket string, proxyEndpoint string,
+	instEnvs []string, startCmd string) error {
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
@@ -178,7 +198,7 @@ func (c *Client) LaunchInstance(name string) error {
 	}
 	//update instance config
 	c.logger.Info(fmt.Sprintf("update instance %s cpu&memory&disk quota", name))
-	err = c.ApplyResourceLimit(name)
+	err = c.ApplyResourceLimitAndProxy(name, instSocket, proxyEndpoint, instEnvs)
 	if err != nil {
 		return err
 	}
@@ -191,6 +211,26 @@ func (c *Client) LaunchInstance(name string) error {
 			Stateful: false,
 		}
 		op, err := c.instServer.UpdateInstanceState(name, req, etag)
+		if err != nil {
+			return err
+		}
+		err = op.Wait()
+		if err != nil {
+			return err
+		}
+	}
+
+	//execute start command
+	c.logger.Info(fmt.Sprintf("start to execute command %s on instance %s ", name, startCmd))
+	if len(startCmd) != 0 {
+		command := strings.Split(startCmd, " ")
+		fmt.Println(command)
+		req := api.InstanceExecPost{
+			Command:     command,
+			WaitForWS:   false,
+			Interactive: false,
+		}
+		op, err := c.instServer.ExecInstance(name, req, nil)
 		if err != nil {
 			return err
 		}
@@ -238,6 +278,10 @@ func (c *Client) CreateInstance(imageAlias string, instanceName string) error {
 			Type:  SOURCE_TYPE_IMAGE,
 			Alias: imageAlias,
 		},
+	}
+	if _, ok := c.DeviceLimits["root"]; ok {
+		req.Devices = map[string]map[string]string{}
+		req.Devices["root"] = c.DeviceLimits["root"]
 	}
 	op, err := c.instServer.CreateInstance(req)
 	if err != nil {
