@@ -134,8 +134,8 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 				canceled = true
 				time.Sleep(time.Second * 5)
 			}
-		case <- readyCh:
-			i := <- h.imageCh
+		case <-readyCh:
+			i := <-h.imageCh
 			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
 			puller, err := h.GetImagePuller(i)
 			if err != nil {
@@ -172,7 +172,7 @@ func (h *Handler) retrieveImages() ([]ImageDetail, error) {
 		return []ImageDetail{}, err
 	}
 	req, err := http.NewRequest("GET", reqUrl.String(), nil)
-	ctx, _ := context.WithTimeout(context.Background(), time.Second * 10)
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
 	req.WithContext(ctx)
 	if err != nil {
 		return []ImageDetail{}, err

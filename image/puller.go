@@ -88,7 +88,7 @@ func newImagePuller(username, password, baseFolder, imageFullName string, logger
 		username: username,
 		password: password,
 		logger:   logger,
-		canceled:  atomic.NewBool(false),
+		canceled: atomic.NewBool(false),
 	}
 
 	imageIDs := strings.Split(imageFullName, ":")
@@ -390,11 +390,11 @@ func (p *Puller) downloadBlob(ctx context.Context, index string, blobID string, 
 	go func() {
 		for {
 			select {
-				case <- finished:
-					return
-				case <- ctx.Done():
-					p.Cancel()
-					return
+			case <-finished:
+				return
+			case <-ctx.Done():
+				p.Cancel()
+				return
 			}
 		}
 	}()
