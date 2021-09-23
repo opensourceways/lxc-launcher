@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	cfgFile       string
-	lxdSocketFile string
+	cfgFile string
 
 	rootCmd = &cobra.Command{
 		Use:   "lxc-launcher",

@@ -30,6 +30,7 @@ type ResourceLimit struct {
 
 type Client struct {
 	instServer   lxd.InstanceServer
+	imageServer  lxd.ImageServer
 	logger       *zap.Logger
 	DeviceLimits map[string]map[string]string
 	Configs      map[string]string
