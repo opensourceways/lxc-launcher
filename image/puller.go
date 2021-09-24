@@ -67,7 +67,6 @@ type Puller struct {
 	password         string
 	authEndpoint     string
 	registryEndpoint string
-	registryHost     string
 	serviceName      string
 	registryToken    string
 	tokenExpiration  time.Time
@@ -80,15 +79,20 @@ type Puller struct {
 	imageDigest      string
 }
 
-func newImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger) (*Puller, error) {
+func newImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger, registry string) (*Puller, error) {
 	if !fileutil.Exist(baseFolder) {
 		return nil, errors.New(fmt.Sprintf("base folder %s not existed", baseFolder))
 	}
+	registryUrl, err := url.Parse(registry)
+	if err != nil {
+		return nil, err
+	}
 	puller := &Puller{
-		username: username,
-		password: password,
-		logger:   logger,
-		canceled: atomic.NewBool(false),
+		username:         username,
+		password:         password,
+		logger:           logger,
+		canceled:         atomic.NewBool(false),
+		registryEndpoint: registry,
 	}
 
 	imageIDs := strings.Split(imageFullName, ":")
@@ -103,7 +107,6 @@ func newImagePuller(username, password, baseFolder, imageFullName string, logger
 		puller.imageTag = imageIDs[1]
 		puller.imageFolder = path.Join(baseFolder, util.GetImagePath(imageFullName))
 	}
-
 	httpClient = &http.Client{
 		Transport: &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
@@ -113,7 +116,7 @@ func newImagePuller(username, password, baseFolder, imageFullName string, logger
 					}
 				}
 				// only add authorization when request registry host.
-				if strings.Contains(req.URL.String(), puller.registryHost) {
+				if strings.Contains(req.URL.String(), registryUrl.Host) {
 					req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", puller.registryToken))
 				}
 				return nil, nil
@@ -179,19 +182,14 @@ func (p *Puller) refreshToken() error {
 }
 
 func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName string, logger *zap.Logger) (*Puller, error) {
-	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger)
+	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
+		fmt.Sprintf("https://%s/v2", region))
 	if err != nil {
 		return nil, err
 	}
 	puller.authEndpoint = fmt.Sprintf("https://%s/swr/auth/v2/registry/auth", region)
 	puller.serviceName = "dockyard"
-	puller.registryEndpoint = fmt.Sprintf("https://%s/v2", region)
 	puller.registryType = SWRRegistry
-	url, err := url.Parse(puller.registryEndpoint)
-	if err != nil {
-		return nil, err
-	}
-	puller.registryHost = url.Host
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
@@ -199,19 +197,14 @@ func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName s
 }
 
 func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger) (*Puller, error) {
-	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger)
+	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
+		"https://registry-1.docker.io/v2")
 	if err != nil {
 		return nil, err
 	}
 	puller.authEndpoint = "https://auth.docker.io/token"
-	puller.registryEndpoint = "https://registry-1.docker.io/v2"
 	puller.serviceName = "registry.docker.io"
 	puller.registryType = DockerRegistry
-	url, err := url.Parse(puller.registryEndpoint)
-	if err != nil {
-		return nil, err
-	}
-	puller.registryHost = url.Host
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
