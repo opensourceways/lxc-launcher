@@ -6,6 +6,7 @@ import (
 	"github.com/opensourceways/lxc-launcher/util"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
+	"os"
 	"strconv"
 	"strings"
 
@@ -37,13 +38,30 @@ type Client struct {
 	Configs      map[string]string
 }
 
-func NewClient(socket, server string, logger *zap.Logger) (*Client, error) {
+func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *zap.Logger) (*Client, error) {
 	var instServer lxd.InstanceServer
 	var err error
 	if len(socket) != 0 && fileutil.Exist(socket) {
 		instServer, err = lxd.ConnectLXDUnix(socket, nil)
 	} else {
-		instServer, err = lxd.ConnectLXD(server, nil)
+		if !fileutil.Exist(clientKeyPath) || !fileutil.Exist(clientSecretPath) {
+			return nil, errors.New(fmt.Sprintf(
+				"client key %s and client secret %s should exist when connect lxd via http",
+				clientKeyPath, clientSecretPath))
+		}
+		keyData, err := os.ReadFile(clientKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		certData, err := os.ReadFile(clientSecretPath)
+		if err != nil {
+			return nil, err
+		}
+		instServer, err = lxd.ConnectLXD(server, &lxd.ConnectionArgs{
+			InsecureSkipVerify: true,
+			TLSClientCert: string(certData),
+			TLSClientKey: string(keyData),
+		})
 	}
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to connect lxd server via socket file, %s", err))

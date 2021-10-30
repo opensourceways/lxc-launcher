@@ -34,6 +34,8 @@ var (
 	instSocketFile   string
 	lxdSocket        string
 	lxdServerAddress string
+	clientKeyPath    string
+	clientCertPath   string
 	lxdClient        *lxd.Client
 	additionalConfig []string
 	networkProxy     *network.Proxy
@@ -44,7 +46,9 @@ var (
 
 func init() {
 	launchCommand.PersistentFlags().StringVar(&lxdSocket, "lxd-socket", "", "lxd socket file for communicating")
-	launchCommand.PersistentFlags().StringVar(&lxdServerAddress, "lxd-server-address", "", "lxd server address for communication")
+	launchCommand.PersistentFlags().StringVar(&lxdServerAddress, "lxd-server-address", "", "lxd server address for communication, only work when lxd socket not specified")
+	launchCommand.PersistentFlags().StringVar(&clientKeyPath, "client-key-path", "", "key path for lxd client authentication, only work when lxd socket not specified")
+	launchCommand.PersistentFlags().StringVar(&clientCertPath, "client-cert-path", "", "cert path for lxd client authentication, only work when lxd socket not specified")
 	launchCommand.PersistentFlags().StringVar(&instSocketDir, "instance-socket-dir", "",
 		"Directory for holding instance socket file, ensure this folder exist and access both on host and container")
 	launchCommand.PersistentFlags().StringVar(&cpuResource, "cpu-resource", "", "CPU limitation of lxc instance")
@@ -61,7 +65,6 @@ func init() {
 	launchCommand.PersistentFlags().StringArrayVar(&additionalConfig, "additional-config", []string{}, "Additional config for lxd instance, in the format of `--additional-config key=value`")
 	launchCommand.PersistentFlags().BoolVar(&removeExisting, "remove-existing", true, "Whether to remove existing lxc instance")
 	launchCommand.PersistentFlags().Int32Var(&statusPort, "status-port", 8082, "health server port")
-	launchCommand.MarkPersistentFlagRequired("lxd-socket")
 	launchCommand.MarkPersistentFlagRequired("storage-pool")
 	rootCmd.AddCommand(launchCommand)
 }
@@ -82,9 +85,9 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 	}
 	instName = args[0]
 	lxcImage = args[1]
-	if (len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket)) || len(lxdServerAddress) == 0 {
-		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address not specified",
-			lxdSocket))
+	if (len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket)) && len(lxdServerAddress) == 0 {
+		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address %s not specified",
+			lxdSocket, lxdServerAddress))
 	}
 	//if len(instSocketDir)!= 0 && !fileutil.Exist(instSocketDir) {
 	//	return errors.New(fmt.Sprintf("instance socket file directory %s not existed", instSocketDir))
@@ -93,7 +96,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 		instSocketFile = fmt.Sprintf("%s/%s.sock", strings.TrimRight(instSocketDir, "/"), instName)
 	}
 
-	if lxdClient, err = lxd.NewClient(lxdSocket, lxdServerAddress, log.Logger); err != nil {
+	if lxdClient, err = lxd.NewClient(lxdSocket, lxdServerAddress, clientKeyPath, clientCertPath, log.Logger); err != nil {
 		return err
 	}
 
