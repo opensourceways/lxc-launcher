@@ -33,6 +33,7 @@ var (
 	instSocketDir    string
 	instSocketFile   string
 	lxdSocket        string
+	lxdServerAddress string
 	lxdClient        *lxd.Client
 	additionalConfig []string
 	networkProxy     *network.Proxy
@@ -43,6 +44,7 @@ var (
 
 func init() {
 	launchCommand.PersistentFlags().StringVar(&lxdSocket, "lxd-socket", "", "lxd socket file for communicating")
+	launchCommand.PersistentFlags().StringVar(&lxdServerAddress, "lxd-server-address", "", "lxd server address for communication")
 	launchCommand.PersistentFlags().StringVar(&instSocketDir, "instance-socket-dir", "",
 		"Directory for holding instance socket file, ensure this folder exist and access both on host and container")
 	launchCommand.PersistentFlags().StringVar(&cpuResource, "cpu-resource", "", "CPU limitation of lxc instance")
@@ -80,8 +82,9 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 	}
 	instName = args[0]
 	lxcImage = args[1]
-	if len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket) {
-		return errors.New(fmt.Sprintf("lxd socket file %s not existed", lxdSocket))
+	if (len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket)) || len(lxdServerAddress) == 0 {
+		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address not specified",
+			lxdSocket))
 	}
 	//if len(instSocketDir)!= 0 && !fileutil.Exist(instSocketDir) {
 	//	return errors.New(fmt.Sprintf("instance socket file directory %s not existed", instSocketDir))
@@ -90,7 +93,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 		instSocketFile = fmt.Sprintf("%s/%s.sock", strings.TrimRight(instSocketDir, "/"), instName)
 	}
 
-	if lxdClient, err = lxd.NewClient(lxdSocket, log.Logger); err != nil {
+	if lxdClient, err = lxd.NewClient(lxdSocket, lxdServerAddress, log.Logger); err != nil {
 		return err
 	}
 

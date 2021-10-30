@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/opensourceways/lxc-launcher/util"
+	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"strconv"
 	"strings"
@@ -36,8 +37,14 @@ type Client struct {
 	Configs      map[string]string
 }
 
-func NewClient(socket string, logger *zap.Logger) (*Client, error) {
-	instServer, err := lxd.ConnectLXDUnix(socket, nil)
+func NewClient(socket, server string, logger *zap.Logger) (*Client, error) {
+	var instServer lxd.InstanceServer
+	var err error
+	if len(socket) != 0 && fileutil.Exist(socket) {
+		instServer, err = lxd.ConnectLXDUnix(socket, nil)
+	} else {
+		instServer, err = lxd.ConnectLXD(server, nil)
+	}
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to connect lxd server via socket file, %s", err))
 	}

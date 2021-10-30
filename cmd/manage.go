@@ -25,6 +25,7 @@ var (
 
 func init() {
 	manageCommand.PersistentFlags().StringVar(&lxdSocket, "lxd-socket", "", "lxd socket file for communicating")
+	launchCommand.PersistentFlags().StringVar(&lxdServerAddress, "lxd-server-address", "", "lxd server address for communication")
 	manageCommand.PersistentFlags().Int32Var(&imageWorker, "imageWorker", 4, "number of sync worker")
 	manageCommand.PersistentFlags().Int32Var(&syncInterval, "sync-interval", 600, "interval in seconds between two sync action")
 	manageCommand.PersistentFlags().StringVar(&metaEndpoint, "meta-endpoint", "", "endpoint for images metadata")
@@ -51,10 +52,11 @@ func validateManage(cmd *cobra.Command, args []string) error {
 		return errors.New("require image sync folder")
 	}
 	dataFolder = args[0]
-	if len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket) && exitWhenUnReady {
-		return errors.New(fmt.Sprintf("lxd socket file %s not existed", lxdSocket))
+	if (len(lxdSocket) == 0 || !fileutil.Exist(lxdSocket)) || len(lxdServerAddress) == 0 {
+		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address not specified",
+			lxdSocket))
 	}
-	if lxdClient, err = lxd.NewClient(lxdSocket, log.Logger); err != nil && exitWhenUnReady {
+	if lxdClient, err = lxd.NewClient(lxdSocket, lxdServerAddress, log.Logger); err != nil && exitWhenUnReady {
 		return err
 	}
 	if exitWhenUnReady {
