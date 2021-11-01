@@ -15,10 +15,7 @@ import (
 )
 
 const (
-	PROXY_DEVICE_NAME = "instance_network_proxy"
-	PROXY_SOCKET_MODE = "0666"
 	STATUS_RUNNING    = "Running"
-
 	ACTION_STOP       = "stop"
 	ACTION_START      = "start"
 	SOURCE_TYPE_IMAGE = "image"
@@ -75,13 +72,13 @@ func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *z
 }
 
 func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, storagePool, memoryResource,
-	cpuResource string, additionalConfig []string) error {
+	cpuResource string, additionalConfig []string, deviceName string) error {
 	//egress limitation
-	c.DeviceLimits["eth0"] = map[string]string{}
+	c.DeviceLimits[deviceName] = map[string]string{}
 	if len(egressLimit) != 0 {
 		if strings.HasSuffix(egressLimit, "Mbit") || strings.HasSuffix(
 			egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
-			c.DeviceLimits["eth0"]["limits.egress"] = egressLimit
+			c.DeviceLimits[deviceName]["limits.egress"] = egressLimit
 		} else {
 			return errors.New(fmt.Sprintf("instance network egress limitation %s incorrect", egressLimit))
 		}
@@ -90,7 +87,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 	if len(ingressLimit) != 0 {
 		if strings.HasSuffix(ingressLimit, "Mbit") || strings.HasSuffix(
 			ingressLimit, "Gbit") || strings.HasSuffix(ingressLimit, "Tbit") {
-			c.DeviceLimits["eth0"]["limits.ingress"] = ingressLimit
+			c.DeviceLimits[deviceName]["limits.ingress"] = ingressLimit
 		} else {
 			return errors.New(fmt.Sprintf("instance network ingress limitation %s incorrect", ingressLimit))
 		}

@@ -64,7 +64,7 @@ func init() {
 	launchCommand.PersistentFlags().StringVar(&ingressLimit, "network-ingress", "", "Ingress limit for lxc instance")
 	launchCommand.PersistentFlags().StringVar(&egressLimit, "network-egress", "", "Egress limit for lxc instance")
 	launchCommand.PersistentFlags().Int32Var(&proxyPort, "proxy-port", 0, "Proxy port, used to forward requests to lxc instance, for example: tcp:<ip-address>:80, empty means no forwarding")
-	launchCommand.PersistentFlags().StringVar(&networkDeviceName, "device-name", "eth0", "network device name, the destination that will be forwarded to, work only when proxy port specified ")
+	launchCommand.PersistentFlags().StringVar(&networkDeviceName, "device-name", "eth0", "default network device name, can be used for request forwarding ")
 	launchCommand.PersistentFlags().StringArrayVar(&instEnvs, "instance-envs", []string{}, "Instance environment, for example: ENV=production.")
 	launchCommand.PersistentFlags().StringVar(&startCommand, "start-command", "", "Instance startup command (non-interactive & short-term), for example: systemctl start nginx.")
 	launchCommand.PersistentFlags().StringArrayVar(&mountFiles, "mount-files", []string{}, "Mount files into instance in the format of <source>:<destination>")
@@ -107,7 +107,8 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 
 	log.Logger.Info(fmt.Sprintf("start to validate resource limit on instance %s", instName))
 	if err = lxdClient.ValidateResourceLimit(
-		egressLimit, ingressLimit, rootSize, storagePool, memoryResource, cpuResource, additionalConfig); err != nil {
+		egressLimit, ingressLimit, rootSize, storagePool, memoryResource, cpuResource, additionalConfig,
+		networkDeviceName); err != nil {
 		return err
 	}
 	log.Logger.Info(fmt.Sprintf("start to check image %s existence", lxcImage))

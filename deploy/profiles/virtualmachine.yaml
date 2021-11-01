@@ -1,0 +1,24 @@
+config:
+  user.user-data: |
+    ssh_pwauth: yes
+    users:
+      - name: coder
+        passwd: "$6$kM4mAt7hjCwyp$L3Oft9vxUsl.8ZlhpS1pwteEY/zfJovLYFVPQ/OT818p/wz.rXL98Nez1myOdSU8SSQk2JXnnGqaIYDz5vvkT."
+        lock_passwd: false
+        groups: lxd
+        shell: /bin/bash
+        sudo: ALL=(ALL) NOPASSWD:ALL
+description: default profile for playground virtual machine instance
+devices:
+  enp5s0:
+      name: enp5s0
+      network: lxdbr0
+      type: nic
+  root:
+      path: /
+      pool: pool1
+      type: disk
+  config:
+    source: cloud-init:config
+    type: disk
+name: virtualmachine
