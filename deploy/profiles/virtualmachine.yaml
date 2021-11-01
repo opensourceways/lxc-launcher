@@ -3,7 +3,7 @@ config:
     ssh_pwauth: yes
     users:
       - name: coder
-        passwd: "$6$kM4mAt7hjCwyp$L3Oft9vxUsl.8ZlhpS1pwteEY/zfJovLYFVPQ/OT818p/wz.rXL98Nez1myOdSU8SSQk2JXnnGqaIYDz5vvkT."
+        passwd: $6$cvPx25uaHvVc8z$IYXYZQsey4svKQ6z9oextx5R.13zuQtjZMdIJyBGKK5gTze3VxcJeU05HfHuGOXOI9DbbaJp9Un0jweY1mBv2/
         lock_passwd: false
         groups: lxd
         shell: /bin/bash
