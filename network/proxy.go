@@ -18,17 +18,14 @@ type Proxy struct {
 	instName     string
 	Address      string
 	Port         int32
-	WatchSocket  string
+	WatchAddress string
 	logger       *zap.Logger
 	closed       bool
 	CloseChannel chan bool
 	socatBin     string
 }
 
-func NewProxy(instName, address string, port int32, watchSocket string, logger *zap.Logger) (*Proxy, error) {
-	//if !fileutil.Exist(watchSocket) {
-	//	return nil, errors.New("watch socket file not exists")
-	//}
+func NewProxy(instName, address string, port int32, watchAddress string, logger *zap.Logger) (*Proxy, error) {
 	socatBin, err := exec.LookPath("socat")
 	if err != nil {
 		return nil, errors.New("unable to find socat binary")
@@ -37,7 +34,7 @@ func NewProxy(instName, address string, port int32, watchSocket string, logger *
 		instName:     instName,
 		Address:      address,
 		Port:         port,
-		WatchSocket:  watchSocket,
+		WatchAddress: watchAddress,
 		logger:       logger,
 		closed:       false,
 		CloseChannel: make(chan bool, 1),
@@ -76,7 +73,7 @@ func (p *Proxy) runCommandWithStdin(ctx context.Context, cwd, stdin, command str
 func (p *Proxy) Proxy(ctx context.Context) error {
 	args := []string{"-dd",
 		fmt.Sprintf("TCP4-LISTEN:%d,bind=%s,reuseaddr,fork", p.Port, p.Address),
-		fmt.Sprintf("UNIX-CONNECT:%s", p.WatchSocket)}
+		fmt.Sprintf("TCP4-CONNECT:%s", p.WatchAddress)}
 	_, err := p.runCommandWithStdin(ctx, "", "", p.socatBin, args...)
 	if err != nil {
 		p.logger.Error("failed to perform socat bind operation")

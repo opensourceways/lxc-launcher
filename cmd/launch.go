@@ -11,37 +11,43 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"net/http"
-	"strings"
 	"time"
 )
 
 var (
-	instName         string
-	lxcImage         string
-	cpuResource      string
-	memoryResource   string
-	storagePool      string
-	rootSize         string
-	ingressLimit     string
-	egressLimit      string
-	proxyEndpoint    string
-	instEnvs         []string
-	startCommand     string
-	mountFiles       []string
-	exposePort       int32
-	removeExisting   bool
-	instSocketDir    string
-	instSocketFile   string
-	lxdSocket        string
-	lxdServerAddress string
-	clientKeyPath    string
-	clientCertPath   string
-	lxdClient        *lxd.Client
-	additionalConfig []string
-	networkProxy     *network.Proxy
-	prober           *task.Prober
-	statusPort       int32
-	statusServer     *http.Server
+	instName          string
+	lxcImage          string
+	cpuResource       string
+	memoryResource    string
+	storagePool       string
+	rootSize          string
+	ingressLimit      string
+	egressLimit       string
+	proxyPort         int32
+	networkDeviceName string
+	instEnvs          []string
+	startCommand      string
+	mountFiles        []string
+	exposePort        int32
+	removeExisting    bool
+	instType          string
+	instProfiles      []string
+	lxdSocket         string
+	lxdServerAddress  string
+	clientKeyPath     string
+	clientCertPath    string
+	lxdClient         *lxd.Client
+	additionalConfig  []string
+	networkProxy      *network.Proxy
+	prober            *task.Prober
+	statusPort        int32
+	statusServer      *http.Server
+)
+
+const (
+	InstanceContainer  = "container"
+	InstanceVM         = "virtual-machine"
+	NetworkMaxWaitTime = 120
 )
 
 func init() {
@@ -49,15 +55,16 @@ func init() {
 	launchCommand.PersistentFlags().StringVar(&lxdServerAddress, "lxd-server-address", "", "lxd server address for communication, only work when lxd socket not specified")
 	launchCommand.PersistentFlags().StringVar(&clientKeyPath, "client-key-path", "", "key path for lxd client authentication, only work when lxd socket not specified")
 	launchCommand.PersistentFlags().StringVar(&clientCertPath, "client-cert-path", "", "cert path for lxd client authentication, only work when lxd socket not specified")
-	launchCommand.PersistentFlags().StringVar(&instSocketDir, "instance-socket-dir", "",
-		"Directory for holding instance socket file, ensure this folder exist and access both on host and container")
+	launchCommand.PersistentFlags().StringVar(&instType, "instance-type", "container", "instance type container or virtual machine, default is container")
+	launchCommand.PersistentFlags().StringArrayVar(&instProfiles, "instance-profiles", []string{}, "profiles will be applied to instances")
 	launchCommand.PersistentFlags().StringVar(&cpuResource, "cpu-resource", "", "CPU limitation of lxc instance")
 	launchCommand.PersistentFlags().StringVar(&memoryResource, "memory-resource", "", "Memory limitation of lxc instance")
 	launchCommand.PersistentFlags().StringVar(&storagePool, "storage-pool", "", "Storage pool for lxc instance")
 	launchCommand.PersistentFlags().StringVar(&rootSize, "root-size", "", "Root size for lxc instance")
 	launchCommand.PersistentFlags().StringVar(&ingressLimit, "network-ingress", "", "Ingress limit for lxc instance")
 	launchCommand.PersistentFlags().StringVar(&egressLimit, "network-egress", "", "Egress limit for lxc instance")
-	launchCommand.PersistentFlags().StringVar(&proxyEndpoint, "proxy-endpoint", "", "Proxy endpoint, used to forward requests to lxc instance, for example: tcp:127.0.0.1:80, empty means no forwarding")
+	launchCommand.PersistentFlags().Int32Var(&proxyPort, "proxy-port", 0, "Proxy port, used to forward requests to lxc instance, for example: tcp:<ip-address>:80, empty means no forwarding")
+	launchCommand.PersistentFlags().StringVar(&networkDeviceName, "device-name", "eth0", "network device name, the destination that will be forwarded to, work only when proxy port specified ")
 	launchCommand.PersistentFlags().StringArrayVar(&instEnvs, "instance-envs", []string{}, "Instance environment, for example: ENV=production.")
 	launchCommand.PersistentFlags().StringVar(&startCommand, "start-command", "", "Instance startup command (non-interactive & short-term), for example: systemctl start nginx.")
 	launchCommand.PersistentFlags().StringArrayVar(&mountFiles, "mount-files", []string{}, "Mount files into instance in the format of <source>:<destination>")
@@ -89,11 +96,9 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address %s not specified",
 			lxdSocket, lxdServerAddress))
 	}
-	//if len(instSocketDir)!= 0 && !fileutil.Exist(instSocketDir) {
-	//	return errors.New(fmt.Sprintf("instance socket file directory %s not existed", instSocketDir))
-	//}
-	if len(instSocketDir) != 0 {
-		instSocketFile = fmt.Sprintf("%s/%s.sock", strings.TrimRight(instSocketDir, "/"), instName)
+
+	if instType != InstanceVM && instType != InstanceContainer {
+		return errors.New("lxd only accepts virtual machine or container type")
 	}
 
 	if lxdClient, err = lxd.NewClient(lxdSocket, lxdServerAddress, clientKeyPath, clientCertPath, log.Logger); err != nil {
@@ -114,7 +119,7 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 		return errors.New(fmt.Sprintf("unable to find image by alias %s", lxcImage))
 	}
 	log.Logger.Info(fmt.Sprintf("start to check instance %s existence", instName))
-	instanceExists, err := lxdClient.CheckInstanceExists(instName, true)
+	instanceExists, err := lxdClient.CheckInstanceExists(instName, instType)
 	if err != nil {
 		return err
 	}
@@ -140,20 +145,20 @@ func validateLaunch(cmd *cobra.Command, args []string) error {
 }
 
 func createInstance(cmd *cobra.Command, args []string) error {
-	instanceExists, err := lxdClient.CheckInstanceExists(instName, true)
+	instanceExists, err := lxdClient.CheckInstanceExists(instName, instType)
 	if err != nil {
 		return err
 	}
 	if !instanceExists {
 		//launch instance
 		log.Logger.Info(fmt.Sprintf("start to create instance %s", instName))
-		err = lxdClient.CreateInstance(lxcImage, instName)
+		err = lxdClient.CreateInstance(lxcImage, instName, instProfiles, instType)
 		if err != nil {
 			return err
 		}
 	}
 	log.Logger.Info(fmt.Sprintf("start to launch instance %s", instName))
-	err = lxdClient.LaunchInstance(instName, instSocketFile, proxyEndpoint, instEnvs, startCommand)
+	err = lxdClient.LaunchInstance(instName, instEnvs, startCommand, networkDeviceName, NetworkMaxWaitTime)
 	if err != nil {
 		return err
 	}
@@ -190,13 +195,20 @@ func launchStatusHandler(w http.ResponseWriter, req *http.Request) {
 
 func handleLaunch(cmd *cobra.Command, args []string) error {
 	var err error
+	var ipaddress string
 	// create and wait instance ready
-	if err := createInstance(cmd, args); err != nil {
+	if err = createInstance(cmd, args); err != nil {
 		return err
 	}
 	//start proxy if needed
-	if len(instSocketFile) != 0 {
-		networkProxy, err = network.NewProxy(instName, "0.0.0.0", exposePort, instSocketFile, log.Logger)
+	if proxyPort != 0 {
+		ipaddress, err = lxdClient.WaitInstanceNetworkReady(instName, networkDeviceName, NetworkMaxWaitTime)
+		if err != nil {
+			CleanupLaunch()
+			return err
+		}
+		networkProxy, err = network.NewProxy(instName, "0.0.0.0", exposePort,
+			fmt.Sprintf("%s:%d", ipaddress, proxyPort), log.Logger)
 		if err != nil {
 			CleanupLaunch()
 			return err

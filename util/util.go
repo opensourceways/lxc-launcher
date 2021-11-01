@@ -20,7 +20,12 @@ func MergeConfigs(instConfig, newConfig map[string]string) map[string]string {
 
 func MergeDeviceConfigs(instDevices, newDevices map[string]map[string]string) map[string]map[string]string {
 	for k, v := range newDevices {
-		instDevices[k] = MergeConfigs(instDevices[k], v)
+		if _, ok := instDevices[k]; ok {
+			instDevices[k] = MergeConfigs(instDevices[k], v)
+		} else {
+			instDevices[k] = map[string]string{}
+			instDevices[k] = MergeConfigs(instDevices[k], v)
+		}
 	}
 	return instDevices
 }

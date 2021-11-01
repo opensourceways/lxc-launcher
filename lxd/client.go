@@ -3,15 +3,15 @@ package lxd
 import (
 	"errors"
 	"fmt"
+	lxd "github.com/lxc/lxd/client"
+	"github.com/lxc/lxd/shared/api"
 	"github.com/opensourceways/lxc-launcher/util"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"os"
 	"strconv"
 	"strings"
-
-	lxd "github.com/lxc/lxd/client"
-	"github.com/lxc/lxd/shared/api"
+	"time"
 )
 
 const (
@@ -59,8 +59,8 @@ func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *z
 		}
 		instServer, err = lxd.ConnectLXD(server, &lxd.ConnectionArgs{
 			InsecureSkipVerify: true,
-			TLSClientCert: string(certData),
-			TLSClientKey: string(keyData),
+			TLSClientCert:      string(certData),
+			TLSClientKey:       string(keyData),
 		})
 	}
 	if err != nil {
@@ -169,8 +169,7 @@ func (c *Client) CheckPoolExists(name string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client) ApplyResourceLimitAndProxy(name string, instSocket string, proxyEndpoint string,
-	instEnvs []string) error {
+func (c *Client) ApplyResourceLimit(name string, instEnvs []string) error {
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
@@ -187,16 +186,6 @@ func (c *Client) ApplyResourceLimitAndProxy(name string, instSocket string, prox
 	}
 	// Use expanded device for resource update
 	req.Devices = util.MergeDeviceConfigs(instance.ExpandedDevices, c.DeviceLimits)
-	//add proxy if needed
-	if len(instSocket) != 0 && len(proxyEndpoint) != 0 {
-		if _, ok := req.Devices[PROXY_DEVICE_NAME]; !ok {
-			req.Devices[PROXY_DEVICE_NAME] = map[string]string{}
-		}
-		req.Devices[PROXY_DEVICE_NAME]["connect"] = proxyEndpoint
-		req.Devices[PROXY_DEVICE_NAME]["type"] = "proxy"
-		req.Devices[PROXY_DEVICE_NAME]["mode"] = PROXY_SOCKET_MODE
-		req.Devices[PROXY_DEVICE_NAME]["listen"] = fmt.Sprintf("unix:%s", instSocket)
-	}
 	c.logger.Info(fmt.Sprintf("perform instance %s resource limit %v", name, req))
 	op, err := c.instServer.UpdateInstance(name, req, etag)
 	if err != nil {
@@ -205,8 +194,8 @@ func (c *Client) ApplyResourceLimitAndProxy(name string, instSocket string, prox
 	return op.Wait()
 }
 
-func (c *Client) LaunchInstance(name string, instSocket string, proxyEndpoint string,
-	instEnvs []string, startCmd string) error {
+func (c *Client) LaunchInstance(name string, instEnvs []string, startCmd string, deviceName string,
+	maxWaitTime int32) error {
 	instance, etag, err := c.instServer.GetInstance(name)
 	if err != nil {
 		return err
@@ -224,7 +213,7 @@ func (c *Client) LaunchInstance(name string, instSocket string, proxyEndpoint st
 	}
 	//update instance config
 	c.logger.Info(fmt.Sprintf("update instance %s cpu&memory&disk quota", name))
-	err = c.ApplyResourceLimitAndProxy(name, instSocket, proxyEndpoint, instEnvs)
+	err = c.ApplyResourceLimit(name, instEnvs)
 	if err != nil {
 		return err
 	}
@@ -249,6 +238,7 @@ func (c *Client) LaunchInstance(name string, instSocket string, proxyEndpoint st
 	//execute start command
 	c.logger.Info(fmt.Sprintf("start to execute command %s on instance %s ", name, startCmd))
 	if len(startCmd) != 0 {
+		_, err := c.WaitInstanceNetworkReady(name, deviceName, maxWaitTime)
 		command := strings.Split(startCmd, " ")
 		fmt.Println(command)
 		req := api.InstanceExecPost{
@@ -263,6 +253,43 @@ func (c *Client) LaunchInstance(name string, instSocket string, proxyEndpoint st
 		return op.Wait()
 	}
 	return nil
+}
+
+func (c *Client) WaitInstanceNetworkReady(name string, network string, maxWaitSeconds int32) (string, error) {
+	retry := int32(0)
+	for {
+		c.logger.Info(fmt.Sprintf("start to get network status %s", name))
+		state, err := c.GetInstanceState(name)
+		if err != nil {
+			return "", err
+		}
+		for n, device := range state.Network {
+			if n != network {
+				continue
+			}
+			if device.State == "up" {
+				for _, f := range device.Addresses {
+					if f.Family == "inet" {
+						return f.Address, nil
+					}
+				}
+			}
+		}
+		time.Sleep(5 * time.Second)
+		retry += 1
+		if retry >= maxWaitSeconds/5 {
+			return "", errors.New("failed to obtain instance ip address after 2 minutes")
+		}
+	}
+}
+
+func (c *Client) GetInstanceState(name string) (*api.InstanceState, error) {
+	c.logger.Info(fmt.Sprintf("start to get instance state %s", name))
+	state, _, err := c.instServer.GetInstanceState(name)
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 func (c *Client) StopInstance(name string, alsoDelete bool) error {
@@ -297,18 +324,20 @@ func (c *Client) StopInstance(name string, alsoDelete bool) error {
 	return nil
 }
 
-func (c *Client) CreateInstance(imageAlias string, instanceName string) error {
+func (c *Client) CreateInstance(imageAlias string, instanceName string, profiles []string, instType string) error {
 	req := api.InstancesPost{
 		Name: instanceName,
 		Source: api.InstanceSource{
 			Type:  SOURCE_TYPE_IMAGE,
 			Alias: imageAlias,
 		},
+		Type: api.InstanceType(instType),
 	}
 	if _, ok := c.DeviceLimits["root"]; ok {
 		req.Devices = map[string]map[string]string{}
 		req.Devices["root"] = c.DeviceLimits["root"]
 	}
+	req.Profiles = profiles
 	op, err := c.instServer.CreateInstance(req)
 	if err != nil {
 		return err
@@ -329,12 +358,8 @@ func (c *Client) CheckImageByAlias(alias string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client) CheckInstanceExists(name string, containerOnly bool) (bool, error) {
-	instanceType := api.InstanceTypeAny
-	if containerOnly {
-		instanceType = api.InstanceTypeContainer
-	}
-	names, err := c.instServer.GetInstanceNames(instanceType)
+func (c *Client) CheckInstanceExists(name string, instanceType string) (bool, error) {
+	names, err := c.instServer.GetInstanceNames(api.InstanceType(instanceType))
 	if err != nil {
 		return false, err
 	}
