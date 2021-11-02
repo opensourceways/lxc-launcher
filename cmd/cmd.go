@@ -1,54 +1,38 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/opensourceways/lxc-launcher/log"
-	"os"
-
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"github.com/urfave/cli/v2"
+	"time"
 )
 
-var (
-	cfgFile string
-
-	rootCmd = &cobra.Command{
-		Use:   "lxc-launcher",
-		Short: "A tool for lxc instance management & proxy tool",
-		Long: `Lxc launcher acts as a lxc instance agent in kubernetes which 
+var RootCmd = &cli.App{
+	Name:    "launcher",
+	HelpName: "launcher",
+	Version: "v0.0.1",
+	Usage: `Lxc launcher acts as a lxc instance agent in kubernetes which 
 responsible for lxc instance lifecycle management as well as the network proxy`,
-	}
-)
-
-// Execute executes the root command.
-func Execute() error {
-	return rootCmd.Execute()
-}
-
-func init() {
-	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "$HOME/.lxc-launcher.yaml", "config file")
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-}
-
-func initConfig() {
-	viper.SetDefault("debug", false)
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		// Search config in home directory with name ".cobra" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".cobra")
-	}
-	viper.AutomaticEnv()
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
-	log.InitLog(viper.GetBool("debug"))
+	Compiled: time.Now(),
+	Authors: []*cli.Author{
+		&cli.Author{
+			Name:  "TommyLike",
+			Email: "tommylikehu@gmail.com",
+		},
+	},
+	Commands: []*cli.Command{
+		launchCommand,
+		manageCommand,
+	},
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "debug",
+			Value:   false,
+			Usage:   "whether to enable debug log",
+			EnvVars: []string{"DEBUG"},
+		},
+	},
+	Before: func(context *cli.Context) error {
+		log.InitLog(context.Bool("debug"))
+		return nil
+	},
 }

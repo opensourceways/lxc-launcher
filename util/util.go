@@ -73,7 +73,7 @@ func handleSignals(c chan os.Signal, cleanup cleanUp) {
 	os.Exit(0)
 }
 
-func ServerHealth(handler statusHandler, statusPort int32) {
+func ServerHealth(handler statusHandler, statusPort int64) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler)
 	statusServer := http.Server{

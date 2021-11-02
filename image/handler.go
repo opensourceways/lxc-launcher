@@ -21,8 +21,8 @@ const (
 type Handler struct {
 	baseFolder   string
 	metaEndpoint string
-	worker       int
-	syncInterval int32
+	worker       int64
+	syncInterval int64
 	imageCh      chan ImageDetail
 	closeCh      chan bool
 	logger       *zap.Logger
@@ -40,7 +40,7 @@ type ImageDetail struct {
 	Type string `json:"type"`
 }
 
-func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker int, syncInterval int32, lxdClient *lxd.Client, logger *zap.Logger) (*Handler, error) {
+func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker int64, syncInterval int64, lxdClient *lxd.Client, logger *zap.Logger) (*Handler, error) {
 
 	return &Handler{
 		user:         username,
@@ -62,7 +62,7 @@ func (h *Handler) StartLoop() {
 		h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
 		return
 	}
-	for i := 1; i <= h.worker; i++ {
+	for i := 1; i <= int(h.worker); i++ {
 		h.logger.Info(fmt.Sprintf("starting to initialzie worker %d to load image.", i))
 		go h.pullingImage(i, h.closeCh)
 	}

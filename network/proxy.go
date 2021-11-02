@@ -17,7 +17,7 @@ const MaxRetry = 3
 type Proxy struct {
 	instName     string
 	Address      string
-	Port         int32
+	Port         int64
 	WatchAddress string
 	logger       *zap.Logger
 	closed       bool
@@ -25,7 +25,7 @@ type Proxy struct {
 	socatBin     string
 }
 
-func NewProxy(instName, address string, port int32, watchAddress string, logger *zap.Logger) (*Proxy, error) {
+func NewProxy(instName, address string, port int64, watchAddress string, logger *zap.Logger) (*Proxy, error) {
 	socatBin, err := exec.LookPath("socat")
 	if err != nil {
 		return nil, errors.New("unable to find socat binary")
