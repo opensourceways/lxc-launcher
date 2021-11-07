@@ -168,7 +168,7 @@ var launchCommand = &cli.Command{
 			Name:    StartCommand,
 			Aliases: []string{"sc"},
 			Value:   "",
-			Usage:   "Instance startup command (non-interactive & short-term), for example: systemctl start nginx.",
+			Usage:   "Instance startup command (non-interactive & short-term), for example: systemctl start nginx. command will be warpped as 'sh -c <command_input>'",
 			EnvVars: []string{strings.ToUpper(StartCommand)},
 		},
 		&cli.StringSliceFlag{

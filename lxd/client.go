@@ -233,17 +233,27 @@ func (c *Client) LaunchInstance(name string, instEnvs []string, startCmd string,
 	}
 
 	//execute start command
-	c.logger.Info(fmt.Sprintf("start to execute command %s on instance %s ", name, startCmd))
 	if len(startCmd) != 0 {
 		_, err := c.WaitInstanceNetworkReady(name, deviceName, maxWaitTime)
-		command := strings.Split(startCmd, " ")
-		fmt.Println(command)
+		command := []string{
+			"sh",
+			"-c",
+			startCmd,
+		}
 		req := api.InstanceExecPost{
 			Command:     command,
-			WaitForWS:   false,
+			WaitForWS:   true,
 			Interactive: false,
+			User: 0,
+			Group: 0,
 		}
-		op, err := c.instServer.ExecInstance(name, req, nil)
+		option := lxd.InstanceExecArgs{
+			Stdout: os.Stdout,
+			Stderr: os.Stdin,
+		}
+		c.logger.Info(fmt.Sprintf("start to execute command %s on instance %s ", name,
+			strings.Join(command, " ")))
+		op, err := c.instServer.ExecInstance(name, req, &option)
 		if err != nil {
 			return err
 		}
