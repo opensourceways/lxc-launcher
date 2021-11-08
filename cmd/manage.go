@@ -9,7 +9,6 @@ import (
 	"github.com/opensourceways/lxc-launcher/util"
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-	"strings"
 	"time"
 )
 
@@ -37,28 +36,28 @@ var manageCommand = &cli.Command{
 			Aliases: []string{"l"},
 			Value:   "",
 			Usage:   "lxd socket file for communicating",
-			EnvVars: []string{strings.Replace(strings.ToUpper(LXDSocket), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(LXDSocket)},
 		},
 		&cli.StringFlag{
 			Name:    LXDServerAddress,
 			Aliases: []string{"s"},
 			Value:   "",
 			Usage:   "lxd server address for communication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(LXDServerAddress), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(LXDServerAddress)},
 		},
 		&cli.StringFlag{
 			Name:    ClientKeyPath,
 			Aliases: []string{"k"},
 			Value:   "",
 			Usage:   "key path for lxd client authentication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ClientKeyPath), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ClientKeyPath)},
 		},
 		&cli.StringFlag{
 			Name:    ClientCertPath,
 			Aliases: []string{"c"},
 			Value:   "",
 			Usage:   "cert path for lxd client authentication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ClientCertPath), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ClientCertPath)},
 		},
 		&cli.StringFlag{
 			Name:     StoragePool,
@@ -66,46 +65,46 @@ var manageCommand = &cli.Command{
 			Required: true,
 			Value:    "",
 			Usage:    "Storage pool for lxc instance",
-			EnvVars:  []string{strings.Replace(strings.ToUpper(StoragePool), "-", "_", -1)},
+			EnvVars:  []string{GenerateEnvFlags(StoragePool)},
 		},
 		&cli.Int64Flag{
 			Name:    ImageWorker,
 			Aliases: []string{"w"},
 			Value:   4,
 			Usage:   "number of sync worker",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ImageWorker), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ImageWorker)},
 		},
 		&cli.Int64Flag{
 			Name:    SyncInterval,
 			Aliases: []string{"si"},
 			Value:   600,
 			Usage:   "interval in seconds between two sync action",
-			EnvVars: []string{strings.Replace(strings.ToUpper(SyncInterval), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(SyncInterval)},
 		},
 		&cli.StringFlag{
 			Name:    MetaEndpoint,
 			Aliases: []string{"m"},
 			Usage:   "endpoint for images metadata",
-			EnvVars: []string{strings.Replace(strings.ToUpper(MetaEndpoint), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(MetaEndpoint)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryUser,
 			Aliases: []string{"u"},
 			Usage:   "docker registry user",
-			EnvVars: []string{strings.Replace(strings.ToUpper(RegistryUser), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(RegistryUser)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryPassword,
 			Aliases: []string{"p"},
 			Usage:   "docker registry password",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ClientKeyPath), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(RegistryPassword)},
 		},
 		&cli.BoolFlag{
 			Name:    ExitWhenUnready,
 			Aliases: []string{"e"},
 			Value:   true,
 			Usage:   "exit if lxd server unready",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ExitWhenUnready), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ExitWhenUnready)},
 		},
 	},
 	Before: validateManage,

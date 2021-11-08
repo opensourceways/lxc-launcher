@@ -7,9 +7,9 @@ import (
 )
 
 var RootCmd = &cli.App{
-	Name:    "launcher",
+	Name:     "launcher",
 	HelpName: "launcher",
-	Version: "v0.0.1",
+	Version:  "v0.0.1",
 	Usage: `Lxc launcher acts as a lxc instance agent in kubernetes which 
 responsible for lxc instance lifecycle management as well as the network proxy`,
 	Compiled: time.Now(),

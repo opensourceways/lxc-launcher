@@ -244,8 +244,8 @@ func (c *Client) LaunchInstance(name string, instEnvs []string, startCmd string,
 			Command:     command,
 			WaitForWS:   true,
 			Interactive: false,
-			User: 0,
-			Group: 0,
+			User:        0,
+			Group:       0,
 		}
 		option := lxd.InstanceExecArgs{
 			Stdout: os.Stdout,

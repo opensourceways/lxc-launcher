@@ -11,7 +11,6 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -52,6 +51,7 @@ const (
 	AdditionalConfig = "additional-config"
 	RemoveExisting   = "remove-existing"
 	StatusPort       = "status-port"
+	ImageAlias       = "image-alias"
 )
 
 var launchCommand = &cli.Command{
@@ -64,55 +64,55 @@ var launchCommand = &cli.Command{
 			Aliases: []string{"l"},
 			Value:   "",
 			Usage:   "lxd socket file for communicating",
-			EnvVars: []string{strings.Replace(strings.ToUpper(LXDSocket), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(LXDSocket)},
 		},
 		&cli.StringFlag{
 			Name:    LXDServerAddress,
 			Aliases: []string{"s"},
 			Value:   "",
 			Usage:   "lxd server address for communication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(LXDServerAddress), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(LXDServerAddress)},
 		},
 		&cli.StringFlag{
 			Name:    ClientKeyPath,
 			Aliases: []string{"k"},
 			Value:   "",
 			Usage:   "key path for lxd client authentication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ClientKeyPath), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ClientKeyPath)},
 		},
 		&cli.StringFlag{
 			Name:    ClientCertPath,
 			Aliases: []string{"c"},
 			Value:   "",
 			Usage:   "cert path for lxd client authentication, only work when lxd socket not specified",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ClientCertPath), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ClientCertPath)},
 		},
 		&cli.StringFlag{
 			Name:    InstanceType,
 			Aliases: []string{"t"},
 			Value:   "container",
 			Usage:   "instance type container or virtual machine, default is container",
-			EnvVars: []string{strings.Replace(strings.ToUpper(InstanceType), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(InstanceType)},
 		},
 		&cli.StringSliceFlag{
 			Name:    InstanceProfiles,
 			Aliases: []string{"p"},
 			Usage:   "profiles will be applied to instances",
-			EnvVars: []string{strings.Replace(strings.ToUpper(InstanceProfiles), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(InstanceProfiles)},
 		},
 		&cli.StringFlag{
 			Name:    CPUResource,
 			Aliases: []string{"rc"},
 			Value:   "",
 			Usage:   "CPU limitation of lxc instance",
-			EnvVars: []string{strings.Replace(strings.ToUpper(CPUResource), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(CPUResource)},
 		},
 		&cli.StringFlag{
 			Name:    MemoryResource,
 			Aliases: []string{"rm"},
 			Value:   "",
 			Usage:   "Memory limitation of lxc instance",
-			EnvVars: []string{strings.Replace(strings.ToUpper(MemoryResource), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(MemoryResource)},
 		},
 		&cli.StringFlag{
 			Name:     StoragePool,
@@ -120,7 +120,7 @@ var launchCommand = &cli.Command{
 			Required: true,
 			Value:    "",
 			Usage:    "Storage pool for lxc instance",
-			EnvVars:  []string{strings.Replace(strings.ToUpper(StoragePool), "-", "_", -1)},
+			EnvVars:  []string{GenerateEnvFlags(StoragePool)},
 		},
 		&cli.StringFlag{
 			Name:     RootSize,
@@ -128,81 +128,89 @@ var launchCommand = &cli.Command{
 			Required: true,
 			Value:    "",
 			Usage:    "Root size for lxc instance",
-			EnvVars:  []string{strings.Replace(strings.ToUpper(RootSize), "-", "_", -1)},
+			EnvVars:  []string{GenerateEnvFlags(RootSize)},
 		},
 		&cli.StringFlag{
 			Name:    NetworkIngress,
 			Aliases: []string{"ri"},
 			Value:   "",
 			Usage:   "Ingress limit for lxc instance",
-			EnvVars: []string{strings.Replace(strings.ToUpper(NetworkIngress), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(NetworkIngress)},
 		},
 		&cli.StringFlag{
 			Name:    NetworkEgress,
 			Aliases: []string{"re"},
 			Value:   "",
 			Usage:   "Egress limit for lxc instance",
-			EnvVars: []string{strings.Replace(strings.ToUpper(NetworkEgress), "-", "_", 0)},
+			EnvVars: []string{GenerateEnvFlags(NetworkEgress)},
 		},
 		&cli.Int64Flag{
 			Name:    ProxyPort,
 			Aliases: []string{"pp"},
 			Value:   0,
 			Usage:   "Proxy port, used to forward requests to lxc instance, for example: tcp:<ip-address>:80, empty means no forwarding",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ProxyPort), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ProxyPort)},
 		},
 		&cli.StringFlag{
 			Name:    DeviceName,
 			Aliases: []string{"dn"},
 			Value:   "eth0",
 			Usage:   "default network device name, can be used for request forwarding",
-			EnvVars: []string{strings.Replace(strings.ToUpper(DeviceName), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(DeviceName)},
 		},
 		&cli.StringSliceFlag{
 			Name:    InstanceEnvs,
 			Aliases: []string{"e"},
 			Usage:   "Instance environment, for example: ENV=production.",
-			EnvVars: []string{strings.Replace(strings.ToUpper(InstanceEnvs), "-", "_", 0)},
+			EnvVars: []string{GenerateEnvFlags(InstanceEnvs)},
 		},
 		&cli.StringFlag{
 			Name:    StartCommand,
 			Aliases: []string{"sc"},
 			Value:   "",
-			Usage:   "Instance startup command (non-interactive & short-term), for example: systemctl start nginx. command will be warpped as 'sh -c <command_input>'",
-			EnvVars: []string{strings.Replace(strings.ToUpper(StartCommand), "-", "_", -1)},
+			Usage:   "Instance startup command (non-interactive & short-term), for example: systemctl start nginx. command will be wrapped as 'sh -c <command_input>'",
+			EnvVars: []string{GenerateEnvFlags(StartCommand)},
 		},
 		&cli.StringSliceFlag{
 			Name:    MountFiles,
 			Aliases: []string{"m"},
 			Usage:   "Mount files into instance in the format of <source>:<destination>",
-			EnvVars: []string{strings.Replace(strings.ToUpper(MountFiles), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(MountFiles)},
 		},
 		&cli.Int64Flag{
 			Name:    ExposePort,
 			Aliases: []string{"ep"},
 			Value:   8080,
 			Usage:   "Expose port for lxc proxy address",
-			EnvVars: []string{strings.Replace(strings.ToUpper(ExposePort), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(ExposePort)},
 		},
 		&cli.StringSliceFlag{
 			Name:    AdditionalConfig,
 			Aliases: []string{"ac"},
 			Usage:   "Additional config for lxd instance, in the format of `--additional-config key=value`",
-			EnvVars: []string{strings.Replace(strings.ToUpper(AdditionalConfig), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(AdditionalConfig)},
 		},
 		&cli.BoolFlag{
 			Name:    RemoveExisting,
 			Aliases: []string{"rem"},
 			Value:   true,
 			Usage:   "Whether to remove existing lxc instance",
-			EnvVars: []string{strings.Replace(strings.ToUpper(RemoveExisting), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(RemoveExisting)},
 		},
 		&cli.Int64Flag{
 			Name:    StatusPort,
 			Aliases: []string{"stp"},
 			Value:   8082,
 			Usage:   "health server port",
-			EnvVars:[]string{strings.Replace(strings.ToUpper(StatusPort), "-", "_", -1)},
+			EnvVars: []string{GenerateEnvFlags(StatusPort)},
+		},
+		&cli.StringFlag{
+			Name:     ImageAlias,
+			Aliases:  []string{"im"},
+			Value:    "",
+			Required: true,
+			Usage:    "image alias for lxd instance",
+			EnvVars:  []string{GenerateEnvFlags(ImageAlias)},
 		},
 	},
 	Before: validateLaunch,
@@ -211,11 +219,11 @@ var launchCommand = &cli.Command{
 
 func validateLaunch(c *cli.Context) error {
 	var err error
-	if c.Args().Len() < 2 {
-		return errors.New("require instance name and image alias name")
+	if c.Args().Len() < 1 {
+		return errors.New("require instance name")
 	}
 	instName = c.Args().Get(0)
-	lxcImage = c.Args().Get(1)
+	lxcImage = c.String(ImageAlias)
 	if (len(c.String(LXDSocket)) == 0 || !fileutil.Exist(c.String(LXDSocket))) && len(c.String(LXDServerAddress)) == 0 {
 		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address %s not specified",
 			c.String(LXDSocket), c.String(LXDServerAddress)))
