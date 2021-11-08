@@ -1,4 +1,6 @@
-# Notes
+# README
+[![image-builder](https://github.com/opensourceways/lxc-launcher/actions/workflows/image-build.yaml/badge.svg)](https://github.com/opensourceways/lxc-launcher/actions/workflows/image-build.yaml)
+
 This project consists of two components
 1. lxc instance launcher
 2. lxc instance management
