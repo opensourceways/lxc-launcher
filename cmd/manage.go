@@ -9,6 +9,7 @@ import (
 	"github.com/opensourceways/lxc-launcher/util"
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"net"
 	"time"
 )
 
@@ -121,7 +122,11 @@ func validateManage(c *cli.Context) error {
 		return errors.New(fmt.Sprintf("lxd socket file %s not existed and lxd server address %s not specified",
 			c.String(LXDSocket), c.String(LXDServerAddress)))
 	}
-	if lxdClient, err = lxd.NewClient(c.String(LXDSocket), c.String(LXDServerAddress),
+	serverAddress := c.String(LXDServerAddress)
+	if net.ParseIP(c.String(LXDServerAddress)) != nil {
+		serverAddress = fmt.Sprintf("https://%s:8443", c.String(LXDServerAddress))
+	}
+	if lxdClient, err = lxd.NewClient(c.String(LXDSocket), serverAddress,
 		c.String(ClientKeyPath), c.String(ClientCertPath), log.Logger); err != nil && c.Bool(ExitWhenUnready) {
 		return err
 	}

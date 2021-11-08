@@ -10,6 +10,7 @@ import (
 	"github.com/opensourceways/lxc-launcher/util"
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"net"
 	"net/http"
 	"time"
 )
@@ -232,8 +233,11 @@ func validateLaunch(c *cli.Context) error {
 	if c.String(InstanceType) != InstanceVM && c.String(InstanceType) != InstanceContainer {
 		return errors.New("lxd only accepts virtual machine or container type")
 	}
-
-	if lxdClient, err = lxd.NewClient(c.String(LXDSocket), c.String(LXDServerAddress), c.String(ClientKeyPath),
+	serverAddress := c.String(LXDServerAddress)
+	if net.ParseIP(c.String(LXDServerAddress)) != nil {
+		serverAddress = fmt.Sprintf("https://%s:8443", c.String(LXDServerAddress))
+	}
+	if lxdClient, err = lxd.NewClient(c.String(LXDSocket), serverAddress, c.String(ClientKeyPath),
 		c.String(ClientCertPath), log.Logger); err != nil {
 		return err
 	}
