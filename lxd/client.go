@@ -142,15 +142,19 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(cpuResource, "%") {
 			c.Configs["limits.cpu"] = "1"
 			c.Configs["limits.cpu.allowance"] = cpuResource
-		} else {
-			core, err := strconv.Atoi(cpuResource)
+		}  else {
+			core, err := strconv.ParseFloat(cpuResource, 64)
 			if err != nil {
 				return err
 			}
-			if core < 1 {
-				return errors.New("cpu core must be equal or greater than 1")
+			if core >= 1 {
+				c.Configs["limits.cpu"] = string(int(core))
+			} else if core < 1 && core > 0 {
+				c.Configs["limits.cpu"] = "1"
+				c.Configs["limits.cpu.allowance"] = fmt.Sprintf("%0.0f%%", float64(core) * 100)
+			} else {
+				return errors.New("cpu core must be greater than 0")
 			}
-			c.Configs["limits.cpu"] = strconv.Itoa(core)
 		}
 	}
 	//additional config, for instance: security.nesting=true
