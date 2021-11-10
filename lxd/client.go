@@ -79,8 +79,12 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(egressLimit, "Mbit") || strings.HasSuffix(
 			egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
 			c.DeviceLimits[deviceName]["limits.egress"] = egressLimit
+		} else if strings.HasSuffix(egressLimit, "M") || strings.HasSuffix(
+			egressLimit, "G") || strings.HasSuffix(egressLimit, "T") {
+			c.DeviceLimits[deviceName]["limits.egress"] = fmt.Sprintf("%sbit", egressLimit)
 		} else {
-			return errors.New(fmt.Sprintf("instance network egress limitation %s incorrect", egressLimit))
+			return errors.New(fmt.Sprintf(
+				"instance network egress limitation %s incorrect, only support（M|G|T)bit or（M|G|T)", egressLimit))
 		}
 	}
 	//ingress limitation
@@ -88,21 +92,28 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(ingressLimit, "Mbit") || strings.HasSuffix(
 			ingressLimit, "Gbit") || strings.HasSuffix(ingressLimit, "Tbit") {
 			c.DeviceLimits[deviceName]["limits.ingress"] = ingressLimit
+		} else if strings.HasSuffix(ingressLimit, "M") || strings.HasSuffix(
+			ingressLimit, "G") || strings.HasSuffix(ingressLimit, "T") {
+			c.DeviceLimits[deviceName]["limits.ingress"] = fmt.Sprintf("%sbit", ingressLimit)
 		} else {
-			return errors.New(fmt.Sprintf("instance network ingress limitation %s incorrect", ingressLimit))
+			return errors.New(fmt.Sprintf(
+				"instance network ingress limitation %s incorrect, only support（M|G|T)bit or（M|G|T)", ingressLimit))
 		}
 	}
 	//root size
 	c.DeviceLimits["root"] = map[string]string{}
 	if len(rootSize) != 0 {
 		if strings.HasSuffix(rootSize, "MB") || strings.HasSuffix(
-			rootSize, "GB") || strings.HasSuffix(rootSize, "TB") {
+			rootSize, "GB") || strings.HasSuffix(rootSize, "TB") ||
+			strings.HasSuffix(rootSize, "MiB") || strings.HasSuffix(
+			rootSize, "GiB") || strings.HasSuffix(rootSize, "TiB"){
 			c.DeviceLimits["root"]["size"] = rootSize
 			c.DeviceLimits["root"]["pool"] = storagePool
 			c.DeviceLimits["root"]["type"] = "disk"
 			c.DeviceLimits["root"]["path"] = "/"
 		} else {
-			return errors.New(fmt.Sprintf("instance storage size limitation %s incorrect", rootSize))
+			return errors.New(fmt.Sprintf(
+				"instance storage size limitation %s incorrect, only support（M|G|T)iB or（M|G|T)B", rootSize))
 		}
 	}
 	//memory limitation
