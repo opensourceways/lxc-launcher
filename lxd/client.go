@@ -111,6 +111,12 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 			c.DeviceLimits["root"]["pool"] = storagePool
 			c.DeviceLimits["root"]["type"] = "disk"
 			c.DeviceLimits["root"]["path"] = "/"
+		} else if strings.HasSuffix(rootSize, "Mi") || strings.HasSuffix(
+			rootSize, "Gi") || strings.HasSuffix(rootSize, "Ti") {
+			c.DeviceLimits["root"]["size"] = fmt.Sprintf("%sB", rootSize)
+			c.DeviceLimits["root"]["pool"] = storagePool
+			c.DeviceLimits["root"]["type"] = "disk"
+			c.DeviceLimits["root"]["path"] = "/"
 		} else {
 			return errors.New(fmt.Sprintf(
 				"instance storage size limitation %s incorrect, only support（M|G|T)iB or（M|G|T)B", rootSize))
@@ -119,10 +125,16 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 	//memory limitation
 	if len(memoryResource) != 0 {
 		if strings.HasSuffix(memoryResource, "MB") || strings.HasSuffix(
-			memoryResource, "GB") || strings.HasSuffix(memoryResource, "TB") {
+			memoryResource, "GB") || strings.HasSuffix(memoryResource, "TB") ||
+			strings.HasSuffix(memoryResource, "MiB") || strings.HasSuffix(
+			memoryResource, "GiB") || strings.HasSuffix(memoryResource, "TiB") {
 			c.Configs["limits.memory"] = memoryResource
-		} else {
-			return errors.New(fmt.Sprintf("instance memory limitation %s incorrect", memoryResource))
+		} else if strings.HasSuffix(memoryResource, "Mi") || strings.HasSuffix(
+			memoryResource, "Gi") || strings.HasSuffix(memoryResource, "Ti") {
+			c.Configs["limits.memory"] = fmt.Sprintf("%sB", memoryResource)
+		}else {
+			return errors.New(fmt.Sprintf(
+				"instance memory limitation %s incorrect, only support（M|G|T)iB or（M|G|T)B", memoryResource))
 		}
 	}
 	//cpu limitation
