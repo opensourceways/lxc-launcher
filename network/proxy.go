@@ -28,7 +28,9 @@ type Proxy struct {
 func NewProxy(instName, address string, port int64, watchAddress string, logger *zap.Logger) (*Proxy, error) {
 	socatBin, err := exec.LookPath("socat")
 	if err != nil {
-		return nil, errors.New("unable to find socat binary")
+		err := errors.New("unable to find socat binary")
+		logger.Error(err.Error())
+		return nil, err
 	}
 	return &Proxy{
 		instName:     instName,
