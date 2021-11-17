@@ -43,12 +43,11 @@ const (
 	RootSize         = "root-size"
 	NetworkIngress   = "network-ingress"
 	NetworkEgress    = "network-egress"
-	ProxyPort        = "proxy-port"
+	ProxyPortPairs   = "proxy-port-pairs"
 	DeviceName       = "device-name"
 	InstanceEnvs     = "instance-envs"
 	StartCommand     = "start-command"
 	MountFiles       = "mount-files"
-	ExposePort       = "expose-port"
 	AdditionalConfig = "additional-config"
 	RemoveExisting   = "remove-existing"
 	StatusPort       = "status-port"
@@ -145,12 +144,11 @@ var launchCommand = &cli.Command{
 			Usage:   "Egress limit for lxc instance",
 			EnvVars: []string{GenerateEnvFlags(NetworkEgress)},
 		},
-		&cli.Int64Flag{
-			Name:    ProxyPort,
+		&cli.StringSliceFlag{
+			Name:    ProxyPortPairs,
 			Aliases: []string{"pp"},
-			Value:   0,
-			Usage:   "Proxy port, used to forward requests to lxc instance, for example: tcp:<ip-address>:80, empty means no forwarding",
-			EnvVars: []string{GenerateEnvFlags(ProxyPort)},
+			Usage:   "Proxy port pairs, used to forward requests to lxc instance, in the format of <expose-port>:<proxy-port>",
+			EnvVars: []string{GenerateEnvFlags(ProxyPortPairs)},
 		},
 		&cli.StringFlag{
 			Name:    DeviceName,
@@ -177,13 +175,6 @@ var launchCommand = &cli.Command{
 			Aliases: []string{"m"},
 			Usage:   "Mount files into instance in the format of <source>:<destination>",
 			EnvVars: []string{GenerateEnvFlags(MountFiles)},
-		},
-		&cli.Int64Flag{
-			Name:    ExposePort,
-			Aliases: []string{"ep"},
-			Value:   8080,
-			Usage:   "Expose port for lxc proxy address",
-			EnvVars: []string{GenerateEnvFlags(ExposePort)},
 		},
 		&cli.StringSliceFlag{
 			Name:    AdditionalConfig,
@@ -340,14 +331,14 @@ func handleLaunch(c *cli.Context) error {
 		return err
 	}
 	//start proxy if needed
-	if c.Int64(ProxyPort) != 0 {
+	if len(c.StringSlice(ProxyPortPairs)) != 0 {
 		ipaddress, err = lxdClient.WaitInstanceNetworkReady(instName, c.String(DeviceName), NetworkMaxWaitTime)
 		if err != nil {
 			CleanupLaunch()
 			return err
 		}
-		networkProxy, err = network.NewProxy(instName, "0.0.0.0", c.Int64(ExposePort),
-			fmt.Sprintf("%s:%d", ipaddress, c.Int64(ProxyPort)), log.Logger)
+		networkProxy, err = network.NewProxy(
+			instName, "0.0.0.0", ipaddress, c.StringSlice(ProxyPortPairs), log.Logger)
 		if err != nil {
 			CleanupLaunch()
 			return err
