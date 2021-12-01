@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/opensourceways/lxc-launcher/log"
 	"github.com/urfave/cli/v2"
+	"lxc-launcher/log"
 	"time"
 )
 

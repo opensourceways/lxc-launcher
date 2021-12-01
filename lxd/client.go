@@ -3,11 +3,14 @@ package lxd
 import (
 	"errors"
 	"fmt"
+	cli "github.com/lxc/lxd/client"
 	lxd "github.com/lxc/lxd/client"
 	"github.com/lxc/lxd/shared/api"
-	"github.com/opensourceways/lxc-launcher/util"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
+	"io/ioutil"
+	"lxc-launcher/log"
+	"lxc-launcher/util"
 	"os"
 	"strconv"
 	"strings"
@@ -46,11 +49,11 @@ func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *z
 				"client key %s and client secret %s should exist when connect lxd via http",
 				clientKeyPath, clientSecretPath))
 		}
-		keyData, err := os.ReadFile(clientKeyPath)
+		keyData, err := ioutil.ReadFile(clientKeyPath)
 		if err != nil {
 			return nil, err
 		}
-		certData, err := os.ReadFile(clientSecretPath)
+		certData, err := ioutil.ReadFile(clientSecretPath)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +109,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(rootSize, "MB") || strings.HasSuffix(
 			rootSize, "GB") || strings.HasSuffix(rootSize, "TB") ||
 			strings.HasSuffix(rootSize, "MiB") || strings.HasSuffix(
-			rootSize, "GiB") || strings.HasSuffix(rootSize, "TiB"){
+			rootSize, "GiB") || strings.HasSuffix(rootSize, "TiB") {
 			c.DeviceLimits["root"]["size"] = rootSize
 			c.DeviceLimits["root"]["pool"] = storagePool
 			c.DeviceLimits["root"]["type"] = "disk"
@@ -132,7 +135,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		} else if strings.HasSuffix(memoryResource, "Mi") || strings.HasSuffix(
 			memoryResource, "Gi") || strings.HasSuffix(memoryResource, "Ti") {
 			c.Configs["limits.memory"] = fmt.Sprintf("%sB", memoryResource)
-		}else {
+		} else {
 			return errors.New(fmt.Sprintf(
 				"instance memory limitation %s incorrect, only support（M|G|T)iB or（M|G|T)B", memoryResource))
 		}
@@ -142,7 +145,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(cpuResource, "%") {
 			c.Configs["limits.cpu"] = "1"
 			c.Configs["limits.cpu.allowance"] = cpuResource
-		}  else {
+		} else {
 			core, err := strconv.ParseFloat(cpuResource, 64)
 			if err != nil {
 				return err
@@ -151,7 +154,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 				c.Configs["limits.cpu"] = fmt.Sprintf("%d", int(core))
 			} else if core < 1 && core > 0 {
 				c.Configs["limits.cpu"] = "1"
-				c.Configs["limits.cpu.allowance"] = fmt.Sprintf("%0.0f%%", float64(core) * 100)
+				c.Configs["limits.cpu.allowance"] = fmt.Sprintf("%0.0f%%", float64(core)*100)
 			} else {
 				return errors.New("cpu core must be greater than 0")
 			}
@@ -390,6 +393,39 @@ func (c *Client) CheckImageByAlias(alias string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (c *Client) DeleteImageAlias(imageName string) error {
+	delImageErr := c.instServer.DeleteImageAlias(imageName)
+	if delImageErr != nil {
+		log.Logger.Error(fmt.Sprint("delImageErr %s", delImageErr))
+		return delImageErr
+	}
+	return nil
+}
+
+func (c *Client) CreateImage(imageApi api.ImagesPost, imageAlias cli.ImageCreateArgs) (op cli.Operation, err error) {
+	op, err = c.instServer.CreateImage(imageApi, &imageAlias)
+	if err != nil {
+		log.Logger.Error(fmt.Sprint("createImageErr %s", err))
+	}
+	return
+}
+
+func (c *Client) GetImages() (images []api.Image, err error) {
+	images, err = c.instServer.GetImages()
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+	}
+	return
+}
+
+func (c *Client) DeleteImage(fingerprint string) (op cli.Operation, err error) {
+	op, err = c.instServer.DeleteImage(fingerprint)
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("Failed to delete mirror, err: %v", err))
+	}
+	return
 }
 
 func (c *Client) CheckInstanceExists(name string, instanceType string) (bool, error) {

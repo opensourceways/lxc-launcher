@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/opensourceways/lxc-launcher/lxd"
 	"go.uber.org/zap"
+	"lxc-launcher/lxd"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,7 +40,8 @@ type ImageDetail struct {
 	Type string `json:"type"`
 }
 
-func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker int64, syncInterval int64, lxdClient *lxd.Client, logger *zap.Logger) (*Handler, error) {
+func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker int64,
+	syncInterval int64, lxdClient *lxd.Client, logger *zap.Logger) (*Handler, error) {
 
 	return &Handler{
 		user:         username,
@@ -105,13 +106,13 @@ func (h *Handler) Close() {
 
 func (h *Handler) GetImagePuller(detail ImageDetail) (*Puller, error) {
 	if strings.ToLower(detail.Type) == DOCKER {
-		return NewDockerIOV2ImagePuller(h.user, h.password, h.baseFolder, detail.Name, h.logger)
+		return NewDockerIOV2ImagePuller(h.user, h.password, h.baseFolder, detail.Name, h.logger, h.lxdClient)
 	} else if strings.ToLower(detail.Type) == SWR {
 		nameIdentities := strings.SplitN(detail.Name, "/", 2)
 		if len(nameIdentities) != 2 {
 			return nil, errors.New(fmt.Sprintf("incorrect SWR image name %s found", detail.Name))
 		}
-		return NewSWRV2ImagePuller(h.user, h.password, h.baseFolder, nameIdentities[0], nameIdentities[1], h.logger)
+		return NewSWRV2ImagePuller(h.user, h.password, h.baseFolder, nameIdentities[0], nameIdentities[1], h.logger, h.lxdClient)
 	}
 	return nil, errors.New(fmt.Sprintf("unsupported docker image type %s found", detail.Type))
 }
@@ -167,6 +168,7 @@ func (h *Handler) pushImageLoadTask() error {
 }
 
 func (h *Handler) retrieveImages() ([]ImageDetail, error) {
+	h.metaEndpoint = "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest"
 	reqUrl, err := url.Parse(h.metaEndpoint)
 	if err != nil {
 		return []ImageDetail{}, err

@@ -1,6 +1,6 @@
 module github.com/opensourceways/lxc-launcher
 
-go 1.16
+go 1.17
 
 require (
 	github.com/lxc/lxd v0.0.0-20210908013500-12f674d56d4e

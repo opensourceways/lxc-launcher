@@ -2,9 +2,9 @@ package task
 
 import (
 	"fmt"
-	"github.com/opensourceways/lxc-launcher/lxd"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"lxc-launcher/lxd"
 	"time"
 )
 

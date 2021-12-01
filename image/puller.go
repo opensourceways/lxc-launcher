@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/opensourceways/lxc-launcher/util"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
+	"lxc-launcher/lxd"
+	"lxc-launcher/util"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,6 +78,8 @@ type Puller struct {
 	registryType     RegistryType
 	canceled         *atomic.Bool
 	imageDigest      string
+	lxdClient        *lxd.Client
+	FileNameList     []string
 }
 
 func newImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger, registry string) (*Puller, error) {
@@ -181,7 +184,7 @@ func (p *Puller) refreshToken() error {
 	return nil
 }
 
-func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName string, logger *zap.Logger) (*Puller, error) {
+func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName string, logger *zap.Logger, lxdClient *lxd.Client) (*Puller, error) {
 	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
 		fmt.Sprintf("https://%s/v2", region))
 	if err != nil {
@@ -190,13 +193,14 @@ func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName s
 	puller.authEndpoint = fmt.Sprintf("https://%s/swr/auth/v2/registry/auth", region)
 	puller.serviceName = "dockyard"
 	puller.registryType = SWRRegistry
+	puller.lxdClient = lxdClient
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
 	return puller, nil
 }
 
-func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger) (*Puller, error) {
+func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger, lxdClient *lxd.Client) (*Puller, error) {
 	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
 		"https://registry-1.docker.io/v2")
 	if err != nil {
@@ -205,6 +209,7 @@ func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName stri
 	puller.authEndpoint = "https://auth.docker.io/token"
 	puller.serviceName = "registry.docker.io"
 	puller.registryType = DockerRegistry
+	puller.lxdClient = lxdClient
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
@@ -215,6 +220,8 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 	defer func() {
 		finishedCh <- true
 	}()
+	// Delete unused images
+	p.DeleteInvalidImages()
 	if fileutil.Exist(p.imageFolder) {
 		digest := filepath.Join(p.imageFolder, MANIFEST_DIGEST)
 		if fileutil.Exist(digest) {
@@ -295,13 +302,14 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 				filepath.Join(p.imageFolder, MANIFEST_DIGEST), err.Error()))
 		}
 	}
-	//load images into lxd
+
 	p.logger.Info(fmt.Sprintf("download image %s:%s successfully finished", p.imageName, p.imageTag))
-
-}
-
-func (p *Puller) loadLXDImages() error {
-	return nil
+	//load images into lxd
+	err = p.loadLXDImages()
+	if err != nil {
+		p.logger.Error(fmt.Sprintf("Failed to load image %s, %s", p.imageName, p.imageTag))
+	}
+	return
 }
 
 func (p *Puller) getImageBlobs(ctx context.Context) ([]string, error) {
@@ -428,6 +436,7 @@ func (p *Puller) downloadBlob(ctx context.Context, index string, blobID string, 
 				return
 			}
 			file.Close()
+			p.FileNameList = append(p.FileNameList, dstFileDir)
 		}
 	}
 }
