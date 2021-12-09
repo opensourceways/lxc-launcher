@@ -3,12 +3,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/opensourceways/lxc-launcher/image"
-	"github.com/opensourceways/lxc-launcher/log"
-	"github.com/opensourceways/lxc-launcher/lxd"
-	"github.com/opensourceways/lxc-launcher/util"
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"lxc-launcher/image"
+	"lxc-launcher/log"
+	"lxc-launcher/lxd"
+	"lxc-launcher/util"
 	"net"
 	"time"
 )
@@ -130,9 +130,12 @@ func validateManage(c *cli.Context) error {
 		c.String(ClientKeyPath), c.String(ClientCertPath), log.Logger); err != nil && c.Bool(ExitWhenUnready) {
 		return err
 	}
-	if c.Bool(ExitWhenUnready) {
 
-	}
+	//if c.Bool(ExitWhenUnready) {
+	//	fmt.Println("Currently waiting for the system to be prepared")
+	//	return nil
+	//}
+
 	imageHandler, err = image.NewImageHandler(c.String(RegistryUser), c.String(RegistryPassword), dataFolder,
 		c.String(MetaEndpoint), c.Int64(ImageWorker), c.Int64(SyncInterval), lxdClient, log.Logger)
 	return nil

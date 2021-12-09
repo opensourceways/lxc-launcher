@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/opensourceways/lxc-launcher/log"
 	"github.com/urfave/cli/v2"
+	"lxc-launcher/log"
 	"time"
 )
 
@@ -26,7 +26,7 @@ responsible for lxc instance lifecycle management as well as the network proxy`,
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:    "debug",
-			Value:   false,
+			Value:   true,
 			Usage:   "whether to enable debug log",
 			EnvVars: []string{"DEBUG"},
 		},

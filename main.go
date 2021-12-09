@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/opensourceways/lxc-launcher/cmd"
 	"github.com/urfave/cli/v2"
 	"log"
+	"lxc-launcher/cmd"
 	"os"
 	"sort"
 )

@@ -1,11 +1,12 @@
-module github.com/opensourceways/lxc-launcher
+module lxc-launcher
 
-go 1.16
+go 1.14
 
 require (
-	github.com/lxc/lxd v0.0.0-20210908013500-12f674d56d4e
+	github.com/lxc/lxd v0.0.0-20211201052709-b534552f27c0
+	github.com/opensourceways/lxc-launcher v0.0.0-20211117074548-f6b536b598d4
 	github.com/urfave/cli/v2 v2.3.0
-	go.etcd.io/etcd/client/pkg/v3 v3.5.0
-	go.uber.org/atomic v1.7.0
-	go.uber.org/zap v1.19.0
+	go.etcd.io/etcd/client/pkg/v3 v3.5.1
+	go.uber.org/atomic v1.9.0
+	go.uber.org/zap v1.19.1
 )

@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/opensourceways/lxc-launcher/util"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
+	"lxc-launcher/lxd"
+	"lxc-launcher/util"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,6 +78,8 @@ type Puller struct {
 	registryType     RegistryType
 	canceled         *atomic.Bool
 	imageDigest      string
+	lxdClient        *lxd.Client
+	FileNameList     []string
 }
 
 func newImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger, registry string) (*Puller, error) {
@@ -181,7 +184,7 @@ func (p *Puller) refreshToken() error {
 	return nil
 }
 
-func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName string, logger *zap.Logger) (*Puller, error) {
+func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName string, logger *zap.Logger, lxdClient *lxd.Client) (*Puller, error) {
 	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
 		fmt.Sprintf("https://%s/v2", region))
 	if err != nil {
@@ -190,13 +193,14 @@ func NewSWRV2ImagePuller(username, password, baseFolder, region, imageFullName s
 	puller.authEndpoint = fmt.Sprintf("https://%s/swr/auth/v2/registry/auth", region)
 	puller.serviceName = "dockyard"
 	puller.registryType = SWRRegistry
+	puller.lxdClient = lxdClient
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
 	return puller, nil
 }
 
-func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger) (*Puller, error) {
+func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName string, logger *zap.Logger, lxdClient *lxd.Client) (*Puller, error) {
 	puller, err := newImagePuller(username, password, baseFolder, imageFullName, logger,
 		"https://registry-1.docker.io/v2")
 	if err != nil {
@@ -205,6 +209,7 @@ func NewDockerIOV2ImagePuller(username, password, baseFolder, imageFullName stri
 	puller.authEndpoint = "https://auth.docker.io/token"
 	puller.serviceName = "registry.docker.io"
 	puller.registryType = DockerRegistry
+	puller.lxdClient = lxdClient
 	if err := puller.refreshToken(); err != nil {
 		return nil, err
 	}
@@ -215,6 +220,9 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 	defer func() {
 		finishedCh <- true
 	}()
+	// Delete unused images
+	p.DeleteInvalidImages()
+	isExist := false
 	if fileutil.Exist(p.imageFolder) {
 		digest := filepath.Join(p.imageFolder, MANIFEST_DIGEST)
 		if fileutil.Exist(digest) {
@@ -230,78 +238,87 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 			}
 			if currentDigest == p.imageDigest {
 				p.logger.Info(fmt.Sprintf("image %s:%s unchanged, skip syncing", p.imageName, p.imageTag))
-				return
+				isExist = true
 			}
 		}
-		//delete folder due to digest file missing
-		err := os.RemoveAll(p.imageFolder)
+		if !isExist {
+			//delete folder due to digest file missing
+			err := os.RemoveAll(p.imageFolder)
+			if err != nil {
+				p.logger.Error(err.Error())
+			}
+		}
+	}
+	if !isExist {
+		//create rootfs inside of image folder
+		err := fileutil.CreateDirAll(path.Join(p.imageFolder, ROOTFS_DIR))
 		if err != nil {
 			p.logger.Error(err.Error())
+			return
 		}
-	}
-	//create rootfs inside of image folder
-	err := fileutil.CreateDirAll(path.Join(p.imageFolder, ROOTFS_DIR))
-	if err != nil {
-		p.logger.Error(err.Error())
-		return
-	}
-	//create and download images
-	p.logger.Info(fmt.Sprintf("start to download image %s:%s and load into lxd", p.imageName, p.imageTag))
-	blobs, err := p.getImageBlobs(ctx)
-	if err != nil {
-		p.logger.Error(err.Error())
-		return
-	}
-	var wg sync.WaitGroup
-	resChannel := make(chan string, len(blobs))
-	var results []string
-	go func() {
-		for {
-			select {
-			case err, ok := <-resChannel:
-				if !ok {
-					p.logger.Info("blob download channel going to shutdown, task finished")
-					return
-				} else {
-					results = append(results, err)
+		//create and download images
+		p.logger.Info(fmt.Sprintf("start to download image %s:%s and load into lxd", p.imageName, p.imageTag))
+		blobs, err := p.getImageBlobs(ctx)
+		if err != nil {
+			p.logger.Error(err.Error())
+			return
+		}
+		var wg sync.WaitGroup
+		resChannel := make(chan string, len(blobs))
+		var results []string
+		go func() {
+			for {
+				select {
+				case err, ok := <-resChannel:
+					if !ok {
+						p.logger.Info("blob download channel going to shutdown, task finished")
+						return
+					} else {
+						results = append(results, err)
+					}
 				}
+			}
+		}()
 
+		for i, blob := range blobs {
+			wg.Add(1)
+			index := fmt.Sprintf("[%d/%d]", i+1, len(blobs))
+			go p.downloadBlob(ctx, index, blob, &wg, resChannel)
+		}
+		wg.Wait()
+		close(resChannel)
+		if len(results) != 0 {
+			p.logger.Error(fmt.Sprintf("image %s:%s, (%d/%d) blobs download failed, the first error is %s",
+				p.imageName, p.imageTag, len(results), len(blobs), results[0]))
+			return
+		}
+		//write digest
+		if len(p.imageDigest) == 0 {
+			p.imageDigest, err = p.getImageManifestDigest(ctx)
+			if err != nil {
+				p.logger.Warn(fmt.Sprintf("unable to collect image digest from registry, %s", err.Error()))
 			}
 		}
-	}()
-	for i, blob := range blobs {
-		wg.Add(1)
-		index := fmt.Sprintf("[%d/%d]", i+1, len(blobs))
-		go p.downloadBlob(ctx, index, blob, &wg, resChannel)
-	}
-	wg.Wait()
-	close(resChannel)
-	if len(results) != 0 {
-		p.logger.Error(fmt.Sprintf("image %s:%s, (%d/%d) blobs download failed, the first error is %s",
-			p.imageName, p.imageTag, len(results), len(blobs), results[0]))
-		return
-	}
-	//write digest
-	if len(p.imageDigest) == 0 {
-		p.imageDigest, err = p.getImageManifestDigest(ctx)
-		if err != nil {
-			p.logger.Warn(fmt.Sprintf("unable to collect image digest from registry, %s", err.Error()))
+
+		if len(p.imageDigest) != 0 {
+			err = util.WriteContent(filepath.Join(p.imageFolder, MANIFEST_DIGEST), p.imageDigest)
+			if err != nil {
+				p.logger.Warn(fmt.Sprintf("unable to write image digest into file %s, %s",
+					filepath.Join(p.imageFolder, MANIFEST_DIGEST), err.Error()))
+			}
 		}
+		p.logger.Info(fmt.Sprintf("download image %s:%s successfully finished", p.imageName, p.imageTag))
+	} else {
+		p.FileNameList = GetFileList(p.imageFolder)
+		p.logger.Info(fmt.Sprintf("Data exists, no need to download repeatedly %s:%s ,successfully finished", p.imageName, p.imageTag))
 	}
-	if len(p.imageDigest) != 0 {
-		err = util.WriteContent(filepath.Join(p.imageFolder, MANIFEST_DIGEST), p.imageDigest)
-		if err != nil {
-			p.logger.Warn(fmt.Sprintf("unable to write image digest into file %s, %s",
-				filepath.Join(p.imageFolder, MANIFEST_DIGEST), err.Error()))
-		}
-	}
+
 	//load images into lxd
-	p.logger.Info(fmt.Sprintf("download image %s:%s successfully finished", p.imageName, p.imageTag))
-
-}
-
-func (p *Puller) loadLXDImages() error {
-	return nil
+	err := p.loadLXDImages()
+	if err != nil {
+		p.logger.Error(fmt.Sprintf("Failed to load image %s, %s", p.imageName, p.imageTag))
+	}
+	return
 }
 
 func (p *Puller) getImageBlobs(ctx context.Context) ([]string, error) {
@@ -339,7 +356,6 @@ func (p *Puller) getImageBlobs(ctx context.Context) ([]string, error) {
 		}
 	}
 	return blobs, nil
-
 }
 
 func (p *Puller) downloadBlob(ctx context.Context, index string, blobID string, wg *sync.WaitGroup, result chan string) {
@@ -428,6 +444,7 @@ func (p *Puller) downloadBlob(ctx context.Context, index string, blobID string, 
 				return
 			}
 			file.Close()
+			p.FileNameList = append(p.FileNameList, dstFileDir)
 		}
 	}
 }
