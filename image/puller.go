@@ -222,6 +222,7 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 	}()
 	// Delete unused images
 	p.DeleteInvalidImages()
+	isExist := false
 	if fileutil.Exist(p.imageFolder) {
 		digest := filepath.Join(p.imageFolder, MANIFEST_DIGEST)
 		if fileutil.Exist(digest) {
@@ -237,75 +238,83 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 			}
 			if currentDigest == p.imageDigest {
 				p.logger.Info(fmt.Sprintf("image %s:%s unchanged, skip syncing", p.imageName, p.imageTag))
-				return
+				isExist = true
 			}
 		}
-		//delete folder due to digest file missing
-		err := os.RemoveAll(p.imageFolder)
+		if !isExist {
+			//delete folder due to digest file missing
+			err := os.RemoveAll(p.imageFolder)
+			if err != nil {
+				p.logger.Error(err.Error())
+			}
+		}
+	}
+	if !isExist {
+		//create rootfs inside of image folder
+		err := fileutil.CreateDirAll(path.Join(p.imageFolder, ROOTFS_DIR))
 		if err != nil {
 			p.logger.Error(err.Error())
+			return
 		}
-	}
-	//create rootfs inside of image folder
-	err := fileutil.CreateDirAll(path.Join(p.imageFolder, ROOTFS_DIR))
-	if err != nil {
-		p.logger.Error(err.Error())
-		return
-	}
-	//create and download images
-	p.logger.Info(fmt.Sprintf("start to download image %s:%s and load into lxd", p.imageName, p.imageTag))
-	blobs, err := p.getImageBlobs(ctx)
-	if err != nil {
-		p.logger.Error(err.Error())
-		return
-	}
-	var wg sync.WaitGroup
-	resChannel := make(chan string, len(blobs))
-	var results []string
-	go func() {
-		for {
-			select {
-			case err, ok := <-resChannel:
-				if !ok {
-					p.logger.Info("blob download channel going to shutdown, task finished")
-					return
-				} else {
-					results = append(results, err)
+		//create and download images
+		p.logger.Info(fmt.Sprintf("start to download image %s:%s and load into lxd", p.imageName, p.imageTag))
+		blobs, err := p.getImageBlobs(ctx)
+		if err != nil {
+			p.logger.Error(err.Error())
+			return
+		}
+		var wg sync.WaitGroup
+		resChannel := make(chan string, len(blobs))
+		var results []string
+		go func() {
+			for {
+				select {
+				case err, ok := <-resChannel:
+					if !ok {
+						p.logger.Info("blob download channel going to shutdown, task finished")
+						return
+					} else {
+						results = append(results, err)
+					}
 				}
+			}
+		}()
 
+		for i, blob := range blobs {
+			wg.Add(1)
+			index := fmt.Sprintf("[%d/%d]", i+1, len(blobs))
+			go p.downloadBlob(ctx, index, blob, &wg, resChannel)
+		}
+		wg.Wait()
+		close(resChannel)
+		if len(results) != 0 {
+			p.logger.Error(fmt.Sprintf("image %s:%s, (%d/%d) blobs download failed, the first error is %s",
+				p.imageName, p.imageTag, len(results), len(blobs), results[0]))
+			return
+		}
+		//write digest
+		if len(p.imageDigest) == 0 {
+			p.imageDigest, err = p.getImageManifestDigest(ctx)
+			if err != nil {
+				p.logger.Warn(fmt.Sprintf("unable to collect image digest from registry, %s", err.Error()))
 			}
 		}
-	}()
-	for i, blob := range blobs {
-		wg.Add(1)
-		index := fmt.Sprintf("[%d/%d]", i+1, len(blobs))
-		go p.downloadBlob(ctx, index, blob, &wg, resChannel)
-	}
-	wg.Wait()
-	close(resChannel)
-	if len(results) != 0 {
-		p.logger.Error(fmt.Sprintf("image %s:%s, (%d/%d) blobs download failed, the first error is %s",
-			p.imageName, p.imageTag, len(results), len(blobs), results[0]))
-		return
-	}
-	//write digest
-	if len(p.imageDigest) == 0 {
-		p.imageDigest, err = p.getImageManifestDigest(ctx)
-		if err != nil {
-			p.logger.Warn(fmt.Sprintf("unable to collect image digest from registry, %s", err.Error()))
+
+		if len(p.imageDigest) != 0 {
+			err = util.WriteContent(filepath.Join(p.imageFolder, MANIFEST_DIGEST), p.imageDigest)
+			if err != nil {
+				p.logger.Warn(fmt.Sprintf("unable to write image digest into file %s, %s",
+					filepath.Join(p.imageFolder, MANIFEST_DIGEST), err.Error()))
+			}
 		}
-	}
-	if len(p.imageDigest) != 0 {
-		err = util.WriteContent(filepath.Join(p.imageFolder, MANIFEST_DIGEST), p.imageDigest)
-		if err != nil {
-			p.logger.Warn(fmt.Sprintf("unable to write image digest into file %s, %s",
-				filepath.Join(p.imageFolder, MANIFEST_DIGEST), err.Error()))
-		}
+		p.logger.Info(fmt.Sprintf("download image %s:%s successfully finished", p.imageName, p.imageTag))
+	} else {
+		p.FileNameList = GetFileList(p.imageFolder)
+		p.logger.Info(fmt.Sprintf("Data exists, no need to download repeatedly %s:%s ,successfully finished", p.imageName, p.imageTag))
 	}
 
-	p.logger.Info(fmt.Sprintf("download image %s:%s successfully finished", p.imageName, p.imageTag))
 	//load images into lxd
-	err = p.loadLXDImages()
+	err := p.loadLXDImages()
 	if err != nil {
 		p.logger.Error(fmt.Sprintf("Failed to load image %s, %s", p.imageName, p.imageTag))
 	}
@@ -347,7 +356,6 @@ func (p *Puller) getImageBlobs(ctx context.Context) ([]string, error) {
 		}
 	}
 	return blobs, nil
-
 }
 
 func (p *Puller) downloadBlob(ctx context.Context, index string, blobID string, wg *sync.WaitGroup, result chan string) {

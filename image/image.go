@@ -1,77 +1,160 @@
 package image
 
 import (
-	"errors"
 	"fmt"
 	cli "github.com/lxc/lxd/client"
 	"github.com/lxc/lxd/shared/api"
 	"lxc-launcher/log"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
-	VM        = "virtual-machine"
-	CONTAINER = "container"
+	VM             = "virtual-machine"
+	CONTAINER      = "container"
+	CONTAINER_TYPE = "rootfs.squashfs"
+	VM_TYPE        = "disk.qcow2"
+	METADATA       = "metadata.yaml"
+	COMPRESS_TYPE  = "gzip"
 )
 
-type FileInfo struct {
-	FileName string
-}
-
 func (p *Puller) loadLXDImages() error {
-	imageExists, _ := p.CheckImageExists()
+	log.Logger.Info(fmt.Sprintln("import image start...."))
+	imagePathList := strings.Split(p.imageName, "/")
+	imageAliaName := imagePathList[len(imagePathList)-1]
+	imageExists, _ := p.lxdClient.CheckManageImageByAlias(imageAliaName)
 	if imageExists {
-		delImageErr := p.lxdClient.DeleteImageAlias(p.imageName)
+		delImageErr := p.lxdClient.DeleteImageAlias(imageAliaName)
 		if delImageErr != nil {
+			fmt.Println("delImageErr: ", delImageErr)
 			return delImageErr
+		} else {
+			log.Logger.Info(fmt.Sprintln("Delete image alias successfully, imageAliaName: ", imageAliaName))
 		}
 	}
-	log.Logger.Info(fmt.Sprintf("start to create images %s", p.imageName))
-	imageApi := api.ImagesPost{}
-	imageAlias := api.ImageAlias{Name: p.imageName, Description: p.imageName}
-	imageApi.Aliases = append(imageApi.Aliases, imageAlias)
-	imageType := api.InstanceType(VM)
-	if strings.Contains(p.imageName, CONTAINER) {
-		imageType = api.InstanceType(CONTAINER)
+	// import images
+	imImageErr := p.ImportLxdImages(imageAliaName)
+	if imImageErr != nil {
+		log.Logger.Error(fmt.Sprintln("imImageErr: ", imImageErr))
+		return imImageErr
 	}
-	imageArgs := cli.ImageCreateArgs{
-		Type: string(imageType)}
-	for _, fileName := range p.FileNameList {
-		if strings.Contains(fileName, "rootfs.squashfs") {
-			fileInfo := FileInfo{FileName: fileName}
-			imageArgs.RootfsFile = fileInfo
-			fileData := make([]byte, 0)
-			imageArgs.RootfsFile.Read(fileData)
-			imageArgs.RootfsName = fileName
-		}
-		if strings.Contains(fileName, "disk.qcow2") {
-			fileInfo := FileInfo{FileName: fileName}
-			imageArgs.MetaFile = fileInfo
-			fileData := make([]byte, 0)
-			imageArgs.MetaFile.Read(fileData)
-			imageArgs.MetaName = fileName
-		}
-		if strings.Contains(fileName, "lxd.tar.xz") {
-			imageApi.Filename = fileName
-		}
-	}
-	op, creteImageErr := p.lxdClient.CreateImage(imageApi, imageArgs)
-	if creteImageErr != nil {
-		return creteImageErr
-	}
-	log.Logger.Info(fmt.Sprintf("The image is imported successfully, %v", op))
 	return nil
 }
 
-func (read FileInfo) Read(data []byte) (int, error) {
-	fp, fpErr := os.Open(read.FileName)
-	if fpErr != nil {
-		log.Logger.Error(fmt.Sprintf("fail to open the file, fileName: %s, err: %s", read.FileName, fpErr))
-		return 0, fpErr
+func (p *Puller) ImportLxdImages(imageAliaName string) error {
+	imageApi := api.ImagesPost{}
+	//imageSource := api.ImagesPostSource{}
+	imageAlias := api.ImageAlias{Name: imageAliaName, Description: imageAliaName}
+	imageApi.Aliases = append(imageApi.Aliases, imageAlias)
+	imageType := api.InstanceType(VM)
+	fileType := VM_TYPE
+	if strings.Contains(p.imageName, CONTAINER) {
+		imageType = api.InstanceType(CONTAINER)
+		fileType = CONTAINER_TYPE
 	}
-	num, readErr := fp.Read(data)
-	return num, readErr
+	imageArgs := cli.ImageCreateArgs{Type: string(imageType)}
+	tp := NewTgzPacker()
+	for _, fileName := range p.FileNameList {
+		baseName := filepath.Base(fileName)
+		if strings.Contains(baseName, fileType) {
+			dirname, fn := filepath.Split(fileName)
+			fileSuffix := filepath.Ext(fn)
+			filePreffix := strings.TrimSuffix(fn, fileSuffix)
+			dst := fmt.Sprintf("%s.tar.gz", filePreffix)
+			trFile := filepath.Join(dirname, dst)
+			if err := tp.TarGz(fileName, trFile); err != nil {
+				log.Logger.Error(fmt.Sprintln(err))
+				return err
+			}
+			fr, readErr := os.Open(trFile)
+			if readErr != nil {
+				log.Logger.Info(fmt.Sprintf("%s, readErr: %s", fileType, readErr))
+				return readErr
+			}
+			imageArgs.RootfsFile = fr
+			imageArgs.RootfsName = trFile
+		}
+
+		if strings.Contains(baseName, METADATA) {
+			dirname, fn := filepath.Split(fileName)
+			fileSuffix := filepath.Ext(fn)
+			filePreffix := strings.TrimSuffix(fn, fileSuffix)
+			dst := fmt.Sprintf("%s.tar.gz", filePreffix)
+			trFile := filepath.Join(dirname, dst)
+			if err := tp.TarGz(fileName, trFile); err != nil {
+				log.Logger.Error(fmt.Sprintln(err))
+				return err
+			}
+			fr, readErr := os.Open(trFile)
+			if readErr != nil {
+				log.Logger.Info(fmt.Sprintf("%s, readErr: %s", METADATA, readErr))
+				return readErr
+			}
+			imageArgs.MetaFile = fr
+			imageArgs.MetaName = trFile
+		}
+	}
+	imageApi.Filename = fmt.Sprintf("%s.tar.gz", imageAliaName)
+	imageApi.ImagePut.Public = true
+	imageApi.CompressionAlgorithm = COMPRESS_TYPE
+	//imageSource.Mode = "push"
+	//imageSource.Type = "image"
+	//imageSource.Alias = imagePathList[len(imagePathList)-1]
+	//imageSource.ImageType = string(imageType)
+	//imageApi.Source = &imageSource
+	log.Logger.Info(fmt.Sprintln("imageApi: ", imageApi, "\n imageArgs: ", imageArgs))
+	log.Logger.Info(fmt.Sprintf("start to create images %s", p.imageName))
+	op, creteImageErr := p.lxdClient.CreateImage(imageApi, imageArgs)
+	if creteImageErr != nil {
+		log.Logger.Error(fmt.Sprintln("creteImageErr: ", creteImageErr))
+		return creteImageErr
+	}
+	log.Logger.Info(fmt.Sprintln("The image is imported successfully, ", op))
+	imAliasErr := p.ImportLxdImageAlias(op, string(imageType), imageAliaName)
+	if imAliasErr != nil {
+		log.Logger.Error(fmt.Sprintln("imAliasErr: ", imAliasErr))
+		return imAliasErr
+	}
+	return nil
+}
+
+func (p *Puller) ImportLxdImageAlias(op cli.Operation, imageType, imageAliaName string) error {
+	// Create image alias
+	alias := api.ImageAliasesPost{}
+	alias.Type = imageType
+	alias.Name = imageAliaName
+	alias.Description = imageAliaName
+	opValue := op.Get()
+	log.Logger.Info(fmt.Sprintln("opValue.Resources: ", opValue.Resources, ",opValue.Metadata: ", opValue.Metadata,
+		",opValue.Status:", opValue.Status, ",opValue.StatusCode: ", opValue.StatusCode,
+		",opValue.Location: ", opValue.Location, ",opValue.Description： ", opValue.Description, ",opValue.ID: ", opValue.ID))
+	for {
+		getOp, _, opErr := p.lxdClient.GetOperation(opValue.ID)
+		if opErr != nil {
+			return opErr
+		}
+		if len(getOp.Metadata) > 0 {
+			if fingerPrint, ok := getOp.Metadata["fingerprint"]; ok {
+				fingerprint := fingerPrint.(string)
+				alias.Target = fingerprint
+				aliasErr := p.lxdClient.CreateImageAlias(alias)
+				if aliasErr != nil {
+					log.Logger.Error(fmt.Sprintln("aliasErr:", aliasErr))
+					return aliasErr
+				} else {
+					log.Logger.Info(fmt.Sprintln("Create image alias successfully, ", alias, ",getOp.ID:", getOp.ID))
+					break
+				}
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	return nil
 }
 
 func (p *Puller) DeleteInvalidImages() {
@@ -90,15 +173,4 @@ func (p *Puller) DeleteInvalidImages() {
 			}
 		}
 	}
-}
-
-func (p *Puller) CheckImageExists() (bool, error) {
-	imageExists, err := p.lxdClient.CheckImageByAlias(p.imageName)
-	if err != nil {
-		return false, err
-	}
-	if !imageExists {
-		return false, errors.New(fmt.Sprintf("unable to find image by alias %s", p.imageName))
-	}
-	return true, nil
 }

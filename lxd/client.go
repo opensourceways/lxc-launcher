@@ -395,8 +395,19 @@ func (c *Client) CheckImageByAlias(alias string) (bool, error) {
 	return false, nil
 }
 
-func (c *Client) DeleteImageAlias(imageName string) error {
-	delImageErr := c.instServer.DeleteImageAlias(imageName)
+func (c *Client) CheckManageImageByAlias(alias string) (bool, error) {
+	aliasValue, _, err := c.instServer.GetImageAlias(alias)
+	if err != nil {
+		return false, err
+	}
+	if len(aliasValue.Name) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *Client) DeleteImageAlias(alias string) error {
+	delImageErr := c.instServer.DeleteImageAlias(alias)
 	if delImageErr != nil {
 		log.Logger.Error(fmt.Sprint("delImageErr %s", delImageErr))
 		return delImageErr
@@ -407,8 +418,13 @@ func (c *Client) DeleteImageAlias(imageName string) error {
 func (c *Client) CreateImage(imageApi api.ImagesPost, imageAlias cli.ImageCreateArgs) (op cli.Operation, err error) {
 	op, err = c.instServer.CreateImage(imageApi, &imageAlias)
 	if err != nil {
-		log.Logger.Error(fmt.Sprint("createImageErr %s", err))
+		log.Logger.Error(fmt.Sprintf("createImageErr %s", err))
 	}
+	return
+}
+
+func (c *Client) CreateImageAlias(alias api.ImageAliasesPost) (err error) {
+	err = c.instServer.CreateImageAlias(alias)
 	return
 }
 
@@ -418,6 +434,14 @@ func (c *Client) GetImages() (images []api.Image, err error) {
 		log.Logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
 	}
 	return
+}
+
+func (c *Client) GetOperation(uuid string) (op *api.Operation, ETag string, err error) {
+	aliasValue, ETag, err := c.instServer.GetOperation(uuid)
+	if err != nil {
+		log.Logger.Error(fmt.Sprintln("alias: ", aliasValue, "ETag:", ETag, "err: ", err))
+	}
+	return aliasValue, ETag, err
 }
 
 func (c *Client) DeleteImage(fingerprint string) (op cli.Operation, err error) {

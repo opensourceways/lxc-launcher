@@ -85,18 +85,21 @@ var manageCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:    MetaEndpoint,
 			Aliases: []string{"m"},
+			Value:   "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest",
 			Usage:   "endpoint for images metadata",
 			EnvVars: []string{GenerateEnvFlags(MetaEndpoint)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryUser,
 			Aliases: []string{"u"},
+			Value:   "cn-north-4@PXKWEJRCWQA1PDUK1XMD",
 			Usage:   "docker registry user",
 			EnvVars: []string{GenerateEnvFlags(RegistryUser)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryPassword,
 			Aliases: []string{"p"},
+			Value:   "be89a9b8681634fc320e84b9add83a8e8f2859aaf00e8fce7ff5be351a052bfd",
 			Usage:   "docker registry password",
 			EnvVars: []string{GenerateEnvFlags(RegistryPassword)},
 		},
@@ -130,9 +133,12 @@ func validateManage(c *cli.Context) error {
 		c.String(ClientKeyPath), c.String(ClientCertPath), log.Logger); err != nil && c.Bool(ExitWhenUnready) {
 		return err
 	}
-	if c.Bool(ExitWhenUnready) {
 
-	}
+	//if c.Bool(ExitWhenUnready) {
+	//	fmt.Println("Currently waiting for the system to be prepared")
+	//	return nil
+	//}
+
 	imageHandler, err = image.NewImageHandler(c.String(RegistryUser), c.String(RegistryPassword), dataFolder,
 		c.String(MetaEndpoint), c.Int64(ImageWorker), c.Int64(SyncInterval), lxdClient, log.Logger)
 	return nil

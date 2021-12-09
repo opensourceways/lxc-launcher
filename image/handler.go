@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
+	"lxc-launcher/log"
 	"lxc-launcher/lxd"
 	"net/http"
 	"net/url"
@@ -144,14 +145,34 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 				readyCh <- true
 				continue
 			}
-			go puller.DownloadImage(ctx, readyCh)
+			puller.DownloadImage(ctx, readyCh)
 		}
 	}
 }
 
+func InitImageDetail() ([]ImageDetail, error) {
+	// images initialization
+	var imageResponse LXDImageResponse
+	imagesList := []string{"swr.cn-north-4.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest",
+	}
+	for _, image := range imagesList {
+		ide := ImageDetail{}
+		ide.Name = image
+		ide.Type = SWR
+		imageResponse.Images = append(imageResponse.Images, ide)
+	}
+	//ide := ImageDetail{}
+	//ide.Name = "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest"
+	//ide.Type = DOCKER
+	//imageResponse.Images = append(imageResponse.Images, ide)
+	return imageResponse.Images, nil
+}
+
 func (h *Handler) pushImageLoadTask() error {
-	images, err := h.retrieveImages()
+	//images, err := h.retrieveImages()
+	images, err := InitImageDetail()
 	if err != nil {
+		log.Logger.Error(fmt.Sprintln("h.retrieveImages, err: ", err))
 		return err
 	}
 	if len(h.imageCh)+len(images) > cap(h.imageCh) {
@@ -168,29 +189,33 @@ func (h *Handler) pushImageLoadTask() error {
 }
 
 func (h *Handler) retrieveImages() ([]ImageDetail, error) {
-	h.metaEndpoint = "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest"
 	reqUrl, err := url.Parse(h.metaEndpoint)
 	if err != nil {
+		log.Logger.Error(fmt.Sprintln("h.metaEndpoint: ", h.metaEndpoint, ", err: ", err))
 		return []ImageDetail{}, err
 	}
 	req, err := http.NewRequest("GET", reqUrl.String(), nil)
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
 	req.WithContext(ctx)
 	if err != nil {
+		log.Logger.Error(fmt.Sprintln("reqUrl: ", reqUrl.String(), ", err: ", err))
 		return []ImageDetail{}, err
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Logger.Error(fmt.Sprintln("resp: ", resp, ", err: ", err))
 		return []ImageDetail{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
+		log.Logger.Error(fmt.Sprintln("resp.StatusCode: ", resp.StatusCode, ", err: ", err))
 		return []ImageDetail{}, errors.New(fmt.Sprintf("request %s response code incorrect expected %d got %d",
 			reqUrl.String(), http.StatusOK, resp.StatusCode))
 	}
 	decoder := json.NewDecoder(resp.Body)
 	var imageResponse LXDImageResponse
 	if err = decoder.Decode(&imageResponse); err != nil {
+		log.Logger.Error(fmt.Sprintln("decoder.Decode(&imageResponse), err: ", err))
 		return []ImageDetail{}, errors.New(fmt.Sprintf(
 			"failed to get image meta info from api response: %s", err))
 	}
