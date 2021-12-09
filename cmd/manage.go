@@ -85,21 +85,18 @@ var manageCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:    MetaEndpoint,
 			Aliases: []string{"m"},
-			Value:   "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest",
 			Usage:   "endpoint for images metadata",
 			EnvVars: []string{GenerateEnvFlags(MetaEndpoint)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryUser,
 			Aliases: []string{"u"},
-			Value:   "cn-north-4@PXKWEJRCWQA1PDUK1XMD",
 			Usage:   "docker registry user",
 			EnvVars: []string{GenerateEnvFlags(RegistryUser)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryPassword,
 			Aliases: []string{"p"},
-			Value:   "be89a9b8681634fc320e84b9add83a8e8f2859aaf00e8fce7ff5be351a052bfd",
 			Usage:   "docker registry password",
 			EnvVars: []string{GenerateEnvFlags(RegistryPassword)},
 		},
