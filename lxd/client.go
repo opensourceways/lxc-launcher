@@ -79,10 +79,12 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 	//egress limitation
 	c.DeviceLimits[deviceName] = map[string]string{}
 	if len(egressLimit) != 0 {
-		if strings.HasSuffix(egressLimit, "Mbit") || strings.HasSuffix(
-			egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
+		if strings.HasSuffix(egressLimit, "kbit") || strings.HasSuffix(
+			egressLimit, "Mbit") || strings.HasSuffix(
+				egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
 			c.DeviceLimits[deviceName]["limits.egress"] = egressLimit
-		} else if strings.HasSuffix(egressLimit, "M") || strings.HasSuffix(
+		} else if strings.HasSuffix(egressLimit, "k") || strings.HasSuffix(
+			egressLimit, "M") || strings.HasSuffix(
 			egressLimit, "G") || strings.HasSuffix(egressLimit, "T") {
 			c.DeviceLimits[deviceName]["limits.egress"] = fmt.Sprintf("%sbit", egressLimit)
 		} else {
@@ -92,11 +94,13 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 	}
 	//ingress limitation
 	if len(ingressLimit) != 0 {
-		if strings.HasSuffix(ingressLimit, "Mbit") || strings.HasSuffix(
+		if strings.HasSuffix(egressLimit, "kbit") || strings.HasSuffix(
+			ingressLimit, "Mbit") || strings.HasSuffix(
 			ingressLimit, "Gbit") || strings.HasSuffix(ingressLimit, "Tbit") {
 			c.DeviceLimits[deviceName]["limits.ingress"] = ingressLimit
-		} else if strings.HasSuffix(ingressLimit, "M") || strings.HasSuffix(
-			ingressLimit, "G") || strings.HasSuffix(ingressLimit, "T") {
+		} else if strings.HasSuffix(egressLimit, "k") || strings.HasSuffix(
+			ingressLimit, "M") || strings.HasSuffix(
+				ingressLimit, "G") || strings.HasSuffix(ingressLimit, "T") {
 			c.DeviceLimits[deviceName]["limits.ingress"] = fmt.Sprintf("%sbit", ingressLimit)
 		} else {
 			return errors.New(fmt.Sprintf(
