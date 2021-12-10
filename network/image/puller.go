@@ -24,6 +24,7 @@ import (
 	"time"
 )
 
+var loadLock sync.Mutex
 
 var (
 	DEFAULT_TIMEOUT       = 10

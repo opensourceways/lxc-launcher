@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,8 +18,6 @@ const (
 	SWR    = "swr"
 	DOCKER = "docker"
 )
-
-var loadLock sync.Mutex
 
 type Handler struct {
 	baseFolder   string
@@ -150,9 +147,9 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 				readyCh <- true
 				continue
 			}
-			loadLock.Lock()
+			//loadLock.Lock()
 			puller.DownloadImage(ctx, readyCh)
-			loadLock.Unlock()
+			//loadLock.Unlock()
 		}
 	}
 }
@@ -171,7 +168,7 @@ func InitImageDetail() ([]ImageDetail, error) {
 		imageResponse.Images = append(imageResponse.Images, ide)
 	}
 	//ide := ImageDetail{}
-	//ide.Name = "swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest"
+	//ide.Name = "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest"
 	//ide.Type = DOCKER
 	//imageResponse.Images = append(imageResponse.Images, ide)
 	return imageResponse.Images, nil
