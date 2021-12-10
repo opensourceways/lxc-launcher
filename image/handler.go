@@ -178,8 +178,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 }
 
 func (h *Handler) pushImageLoadTask() error {
-	//images, err := h.retrieveImages()
-	images, err := InitImageDetail()
+	images, err := h.retrieveImages()
+	//images, err := InitImageDetail()
 	if err != nil {
 		log.Logger.Error(fmt.Sprintln("h.retrieveImages, err: ", err))
 		return err
