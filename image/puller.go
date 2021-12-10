@@ -24,6 +24,7 @@ import (
 	"time"
 )
 
+
 var (
 	DEFAULT_TIMEOUT       = 10
 	DOCKER_CONTENT_DIGEST = "Docker-Content-Digest"

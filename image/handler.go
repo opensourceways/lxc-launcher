@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,8 @@ const (
 	SWR    = "swr"
 	DOCKER = "docker"
 )
+
+var loadLock sync.Mutex
 
 type Handler struct {
 	baseFolder   string
@@ -139,13 +142,17 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 		case <-readyCh:
 			i := <-h.imageCh
 			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
+			loadLock.Lock()
 			puller, err := h.GetImagePuller(i)
+			loadLock.Unlock()
 			if err != nil {
 				h.logger.Error(err.Error())
 				readyCh <- true
 				continue
 			}
+			loadLock.Lock()
 			puller.DownloadImage(ctx, readyCh)
+			loadLock.Unlock()
 		}
 	}
 }
@@ -153,7 +160,9 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 func InitImageDetail() ([]ImageDetail, error) {
 	// images initialization
 	var imageResponse LXDImageResponse
-	imagesList := []string{"swr.cn-north-4.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest",
+	imagesList := []string{
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-vm-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest",
 	}
 	for _, image := range imagesList {
 		ide := ImageDetail{}
@@ -162,7 +171,7 @@ func InitImageDetail() ([]ImageDetail, error) {
 		imageResponse.Images = append(imageResponse.Images, ide)
 	}
 	//ide := ImageDetail{}
-	//ide.Name = "tommylike/openeuler-20.03-lts-sp2-vm-x86:latest"
+	//ide.Name = "swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest"
 	//ide.Type = DOCKER
 	//imageResponse.Images = append(imageResponse.Images, ide)
 	return imageResponse.Images, nil

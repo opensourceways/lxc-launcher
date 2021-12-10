@@ -24,16 +24,6 @@ func (p *Puller) loadLXDImages() error {
 	log.Logger.Info(fmt.Sprintln("import image start...."))
 	imagePathList := strings.Split(p.imageName, "/")
 	imageAliaName := imagePathList[len(imagePathList)-1]
-	imageExists, _ := p.lxdClient.CheckManageImageByAlias(imageAliaName)
-	if imageExists {
-		delImageErr := p.lxdClient.DeleteImageAlias(imageAliaName)
-		if delImageErr != nil {
-			fmt.Println("delImageErr: ", delImageErr)
-			return delImageErr
-		} else {
-			log.Logger.Info(fmt.Sprintln("Delete image alias successfully, imageAliaName: ", imageAliaName))
-		}
-	}
 	// import images
 	imImageErr := p.ImportLxdImages(imageAliaName)
 	if imImageErr != nil {
@@ -46,8 +36,8 @@ func (p *Puller) loadLXDImages() error {
 func (p *Puller) ImportLxdImages(imageAliaName string) error {
 	imageApi := api.ImagesPost{}
 	//imageSource := api.ImagesPostSource{}
-	imageAlias := api.ImageAlias{Name: imageAliaName, Description: imageAliaName}
-	imageApi.Aliases = append(imageApi.Aliases, imageAlias)
+	//imageAlias := api.ImageAlias{Name: imageAliaName, Description: imageAliaName}
+	//imageApi.Aliases = append(imageApi.Aliases, imageAlias)
 	imageType := api.InstanceType(VM)
 	fileType := VM_TYPE
 	if strings.Contains(p.imageName, CONTAINER) {
@@ -105,7 +95,7 @@ func (p *Puller) ImportLxdImages(imageAliaName string) error {
 	//imageSource.ImageType = string(imageType)
 	//imageApi.Source = &imageSource
 	log.Logger.Info(fmt.Sprintln("imageApi: ", imageApi, "\n imageArgs: ", imageArgs))
-	log.Logger.Info(fmt.Sprintf("start to create images %s", p.imageName))
+	log.Logger.Info(fmt.Sprintf("start to create images,imageAliaName: %s", imageAliaName))
 	op, creteImageErr := p.lxdClient.CreateImage(imageApi, imageArgs)
 	if creteImageErr != nil {
 		log.Logger.Error(fmt.Sprintln("creteImageErr: ", creteImageErr))
@@ -137,8 +127,12 @@ func (p *Puller) ImportLxdImageAlias(op cli.Operation, imageType, imageAliaName 
 		}
 		if len(getOp.Metadata) > 0 {
 			if fingerPrint, ok := getOp.Metadata["fingerprint"]; ok {
-				fingerprint := fingerPrint.(string)
-				alias.Target = fingerprint
+				alias.Target = fingerPrint.(string)
+				delAliasErr := p.DeleteImageAlias(imageAliaName)
+				if delAliasErr != nil {
+					log.Logger.Error(fmt.Sprintln("delAliasErr:", delAliasErr))
+					return delAliasErr
+				}
 				aliasErr := p.lxdClient.CreateImageAlias(alias)
 				if aliasErr != nil {
 					log.Logger.Error(fmt.Sprintln("aliasErr:", aliasErr))
@@ -152,6 +146,20 @@ func (p *Puller) ImportLxdImageAlias(op cli.Operation, imageType, imageAliaName 
 			}
 		} else {
 			time.Sleep(1 * time.Second)
+		}
+	}
+	return nil
+}
+
+func (p *Puller) DeleteImageAlias(imageAliaName string) error {
+	imageExists, _ := p.lxdClient.CheckManageImageByAlias(imageAliaName)
+	if imageExists {
+		delImageErr := p.lxdClient.DeleteImageAlias(imageAliaName)
+		if delImageErr != nil {
+			fmt.Println("delImageErr: ", delImageErr)
+			return delImageErr
+		} else {
+			log.Logger.Info(fmt.Sprintln("Delete image alias successfully, imageAliaName: ", imageAliaName))
 		}
 	}
 	return nil
