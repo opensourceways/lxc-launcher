@@ -1,27 +1,14 @@
-# Build the manager binary
-FROM golang:1.17 as builder
+FROM golang:latest as BUILDER
 
-ARG GO_ARCHITECTURE
-ENV GO_ARCHITECTURE ${GO_ARCHITECTURE:-amd64}
+# build binary
+RUN mkdir -p /go/src/gitee.com/lxc-launcher
+COPY . /go/src/gitee.com/lxc-launcher
+RUN cd /go/src/gitee.com/lxc-launcher && CGO_ENABLED=1 go build -v -o ./launcher main.go
 
-WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN go mod download
-
-# Copy the project files
-COPY . .
-
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${DOCKER_ARCHITECTURE} GO111MODULE=on go build -a -o launcher main.go
-
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM alpine/socat:1.7.4.1-r2
-WORKDIR /
-COPY --from=builder /workspace/launcher .
-
-ENTRYPOINT ["/launcher"]
+# copy binary config and utils
+FROM openeuler/openeuler:21.03
+RUN mkdir -p /opt/app/
+# overwrite config yaml
+COPY --from=BUILDER /go/src/gitee.com/lxc-launcher/launcher /opt/app
+WORKDIR /opt/app/
+ENTRYPOINT ["/opt/app/launcher"]

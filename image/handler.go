@@ -39,6 +39,10 @@ type LXDImageResponse struct {
 	Images []ImageDetail `json:"images"`
 }
 
+type LXDImageList struct {
+	Images []string `json:"images"`
+}
+
 type ImageDetail struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
@@ -161,8 +165,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 	// images initialization
 	var imageResponse LXDImageResponse
 	imagesList := []string{
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-vm-x86:latest",
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-vm-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-container-x86:latest",
 	}
 	for _, image := range imagesList {
 		ide := ImageDetail{}
@@ -223,10 +227,26 @@ func (h *Handler) retrieveImages() ([]ImageDetail, error) {
 	}
 	decoder := json.NewDecoder(resp.Body)
 	var imageResponse LXDImageResponse
-	if err = decoder.Decode(&imageResponse); err != nil {
+	var imageList LXDImageList
+	imageReList := make([]ImageDetail, 0)
+	if err = decoder.Decode(&imageList); err != nil {
 		log.Logger.Error(fmt.Sprintln("decoder.Decode(&imageResponse), err: ", err))
 		return []ImageDetail{}, errors.New(fmt.Sprintf(
 			"failed to get image meta info from api response: %s", err))
 	}
+	if len(imageList.Images) > 0 {
+		for _, image := range imageList.Images {
+			imageDetail := ImageDetail{}
+			imageDetail.Name = image
+			if strings.Contains(image, SWR) {
+				imageDetail.Type = SWR
+			} else {
+				imageDetail.Type = DOCKER
+			}
+			imageReList = append(imageReList, imageDetail)
+		}
+		imageResponse.Images = imageReList
+	}
+	log.Logger.Info(fmt.Sprintln("imageResponse.Images: ", imageResponse.Images))
 	return imageResponse.Images, nil
 }
