@@ -91,14 +91,12 @@ var manageCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:    RegistryUser,
 			Aliases: []string{"u"},
-			Value:   "ap-southeast-1@YXLOAPV4N8W73UD2J02Y",
 			Usage:   "docker registry user",
 			EnvVars: []string{GenerateEnvFlags(RegistryUser)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryPassword,
 			Aliases: []string{"p"},
-			Value:   "21c775a4a60716aaa5c41f52fdb1cb08e27fd375122321e82187bb5896aacd8a",
 			Usage:   "docker registry password",
 			EnvVars: []string{GenerateEnvFlags(RegistryPassword)},
 		},
