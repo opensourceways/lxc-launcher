@@ -161,8 +161,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 	// images initialization
 	var imageResponse LXDImageResponse
 	imagesList := []string{
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-vm-x86:latest",
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-vm-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-container-x86:latest",
 	}
 	for _, image := range imagesList {
 		ide := ImageDetail{}
@@ -178,8 +178,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 }
 
 func (h *Handler) pushImageLoadTask() error {
-	//images, err := h.retrieveImages()
-	images, err := InitImageDetail()
+	images, err := h.retrieveImages()
+	//images, err := InitImageDetail()
 	if err != nil {
 		log.Logger.Error(fmt.Sprintln("h.retrieveImages, err: ", err))
 		return err
@@ -228,5 +228,6 @@ func (h *Handler) retrieveImages() ([]ImageDetail, error) {
 		return []ImageDetail{}, errors.New(fmt.Sprintf(
 			"failed to get image meta info from api response: %s", err))
 	}
+	log.Logger.Info(fmt.Sprintln("imageResponse.Images: ", imageResponse.Images))
 	return imageResponse.Images, nil
 }
