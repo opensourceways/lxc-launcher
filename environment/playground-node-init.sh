@@ -4,7 +4,7 @@
 
 # check files
 if [ ! -e ./cert.crt ] && [ ! -e ./lxd.config ];then
-        echo "lack init files"
+        echo "miss init files"
         exit
 fi
 
@@ -39,7 +39,7 @@ fi
 str=`ip add | grep "eth0" | tail -1 | awk '{print $2}'`
 sed -i "s/ip_add/${str%/*}/g" ./lxd.config
 if [ ! -e /dev/vdc ];then
-        echo "lack data disk"
+        echo "miss data disk"
         exit
 fi
 lxd init --preseed < ./lxd.config
