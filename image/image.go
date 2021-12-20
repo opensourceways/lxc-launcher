@@ -16,7 +16,7 @@ const (
 	CONTAINER      = "container"
 	CONTAINER_TYPE = "rootfs.squashfs"
 	VM_TYPE        = "disk.qcow2"
-	METADATA       = "metadata.yaml"
+	LXD_TYPE       = "lxd.tar.xz"
 	COMPRESS_TYPE  = "gzip"
 )
 
@@ -35,9 +35,6 @@ func (p *Puller) loadLXDImages() error {
 
 func (p *Puller) ImportLxdImages(imageAliaName string) error {
 	imageApi := api.ImagesPost{}
-	//imageSource := api.ImagesPostSource{}
-	//imageAlias := api.ImageAlias{Name: imageAliaName, Description: imageAliaName}
-	//imageApi.Aliases = append(imageApi.Aliases, imageAlias)
 	imageType := api.InstanceType(VM)
 	fileType := VM_TYPE
 	if strings.Contains(p.imageName, CONTAINER) {
@@ -45,55 +42,31 @@ func (p *Puller) ImportLxdImages(imageAliaName string) error {
 		fileType = CONTAINER_TYPE
 	}
 	imageArgs := cli.ImageCreateArgs{Type: string(imageType)}
-	tp := NewTgzPacker()
 	for _, fileName := range p.FileNameList {
 		baseName := filepath.Base(fileName)
 		if strings.Contains(baseName, fileType) {
-			dirname, fn := filepath.Split(fileName)
-			fileSuffix := filepath.Ext(fn)
-			filePreffix := strings.TrimSuffix(fn, fileSuffix)
-			dst := fmt.Sprintf("%s.tar.gz", filePreffix)
-			trFile := filepath.Join(dirname, dst)
-			if err := tp.TarGz(fileName, trFile); err != nil {
-				log.Logger.Error(fmt.Sprintln(err))
-				return err
-			}
-			fr, readErr := os.Open(trFile)
+			fr, readErr := os.Open(fileName)
 			if readErr != nil {
 				log.Logger.Info(fmt.Sprintf("%s, readErr: %s", fileType, readErr))
 				return readErr
 			}
 			imageArgs.RootfsFile = fr
-			imageArgs.RootfsName = trFile
+			imageArgs.RootfsName = fileName
 		}
 
-		if strings.Contains(baseName, METADATA) {
-			dirname, fn := filepath.Split(fileName)
-			fileSuffix := filepath.Ext(fn)
-			filePreffix := strings.TrimSuffix(fn, fileSuffix)
-			dst := fmt.Sprintf("%s.tar.gz", filePreffix)
-			trFile := filepath.Join(dirname, dst)
-			if err := tp.TarGz(fileName, trFile); err != nil {
-				log.Logger.Error(fmt.Sprintln(err))
-				return err
-			}
-			fr, readErr := os.Open(trFile)
+		if strings.Contains(baseName, LXD_TYPE) {
+			fr, readErr := os.Open(fileName)
 			if readErr != nil {
-				log.Logger.Info(fmt.Sprintf("%s, readErr: %s", METADATA, readErr))
+				log.Logger.Info(fmt.Sprintf("%s, readErr: %s", LXD_TYPE, readErr))
 				return readErr
 			}
 			imageArgs.MetaFile = fr
-			imageArgs.MetaName = trFile
+			imageArgs.MetaName = fileName
 		}
 	}
-	imageApi.Filename = fmt.Sprintf("%s.tar.gz", imageAliaName)
+	imageApi.Filename = imageAliaName
 	imageApi.ImagePut.Public = true
 	imageApi.CompressionAlgorithm = COMPRESS_TYPE
-	//imageSource.Mode = "push"
-	//imageSource.Type = "image"
-	//imageSource.Alias = imagePathList[len(imagePathList)-1]
-	//imageSource.ImageType = string(imageType)
-	//imageApi.Source = &imageSource
 	log.Logger.Info(fmt.Sprintln("imageApi: ", imageApi, "\n imageArgs: ", imageArgs))
 	log.Logger.Info(fmt.Sprintf("start to create images,imageAliaName: %s", imageAliaName))
 	op, creteImageErr := p.lxdClient.CreateImage(imageApi, imageArgs)
