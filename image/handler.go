@@ -145,16 +145,15 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 			}
 		case <-readyCh:
 			i := <-h.imageCh
-			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
 			loadLock.Lock()
+			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
 			puller, err := h.GetImagePuller(i)
-			loadLock.Unlock()
 			if err != nil {
+				loadLock.Unlock()
 				h.logger.Error(err.Error())
 				readyCh <- true
 				continue
 			}
-			loadLock.Lock()
 			puller.DownloadImage(ctx, readyCh)
 			loadLock.Unlock()
 		}
@@ -167,8 +166,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 	imagesList := []string{
 		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-vm-x86:latest",
 		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-container-x86:latest",
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp3-container-x86:latest",
 		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp3-vm-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp3-container-x86:latest",
 	}
 	for _, image := range imagesList {
 		ide := ImageDetail{}
