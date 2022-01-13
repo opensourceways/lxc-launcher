@@ -167,6 +167,8 @@ func InitImageDetail() ([]ImageDetail, error) {
 	imagesList := []string{
 		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-vm-x86:latest",
 		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-container-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp3-container-x86:latest",
+		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp3-vm-x86:latest",
 	}
 	for _, image := range imagesList {
 		ide := ImageDetail{}
