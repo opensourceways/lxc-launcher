@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,7 +19,7 @@ const (
 	DOCKER = "docker"
 )
 
-var loadLock sync.Mutex
+//var loadLock sync.Mutex
 
 type Handler struct {
 	baseFolder   string
@@ -145,17 +144,17 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 			}
 		case <-readyCh:
 			i := <-h.imageCh
-			loadLock.Lock()
+			//loadLock.Lock()
 			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
 			puller, err := h.GetImagePuller(i)
 			if err != nil {
-				loadLock.Unlock()
+				//loadLock.Unlock()
 				h.logger.Error(err.Error())
 				readyCh <- true
 				continue
 			}
 			puller.DownloadImage(ctx, readyCh)
-			loadLock.Unlock()
+			//loadLock.Unlock()
 		}
 	}
 }

@@ -71,7 +71,7 @@ var manageCommand = &cli.Command{
 		&cli.Int64Flag{
 			Name:    ImageWorker,
 			Aliases: []string{"w"},
-			Value:   4,
+			Value:   1,
 			Usage:   "number of sync worker",
 			EnvVars: []string{GenerateEnvFlags(ImageWorker)},
 		},
