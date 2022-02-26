@@ -2,14 +2,16 @@ package common
 
 import (
 	"fmt"
+	"lxc-launcher/log"
 	"strings"
 	"time"
-	"lxc-launcher/log"
 )
+
 const (
 	DATE_T_FORMAT = "2006-01-02T15:04:05"
-	DATE_FORMAT = "2006-01-02 15:04:05"
+	DATE_FORMAT   = "2006-01-02 15:04:05"
 )
+
 func TimeStrToInt(timeStr string) int64 {
 	if timeStr == "" {
 		return 0
