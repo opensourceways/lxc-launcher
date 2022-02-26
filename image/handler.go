@@ -65,6 +65,12 @@ func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker
 }
 
 func (h *Handler) StartLoop() {
+	// 1. Perform a delete operation on a stopped instance
+	delErr := h.lxdClient.DeleteStopInstances("")
+	if delErr != nil {
+		log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
+	}
+	// 2. Create a mirror of the instance
 	err := h.pushImageLoadTask()
 	if err != nil {
 		h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))

@@ -326,12 +326,7 @@ func launchStatusHandler(w http.ResponseWriter, req *http.Request) {
 func handleLaunch(c *cli.Context) error {
 	var err error
 	var ipaddress string
-	// 1. Perform a delete operation on a stopped instance
-	delErr := lxdClient.DeleteStopInstances(c.String(InstanceType))
-	if delErr != nil {
-		log.Logger.Error(fmt.Sprintf("delErr: %v, InstanceType: %v", err, c.String(InstanceType)))
-	}
-	// 2. create and wait instance ready
+	// 1. create and wait instance ready
 	if err = createInstance(c); err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"lxc-launcher/common"
 	"lxc-launcher/log"
 	"lxc-launcher/util"
 	"os"
@@ -23,6 +24,10 @@ const (
 	ACTION_START      = "start"
 	SOURCE_TYPE_IMAGE = "image"
 	STATUS_STOPPED    = "Stopped"
+)
+
+const (
+	DEL_STOPPED_TIME = 6 * 3600
 )
 
 type ResourceLimit struct {
@@ -482,21 +487,19 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 	// 1. Query the status of an existing instance
 	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Query instance failed, err: %v, " +
+		log.Logger.Error(fmt.Sprintf("Query instance failed, err: %v, "+
 			"instanceType: %v", err, instanceType))
 		return err
 	}
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
 		for _, instance := range instances {
-			if instance.Status == STATUS_STOPPED {
-				op, err := c.instServer.DeleteInstance(instance.Name)
+			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
+			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
+				_, err := c.instServer.DeleteInstance(instance.Name)
 				if err != nil {
-					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, " +
+					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
 						"err: %v, name: %v", err, instance.Name))
-				} else {
-					log.Logger.Error(fmt.Sprintf("Deleting a stopped instance succeeded, " +
-						"err: %v, name: %v", op.Wait(), instance.Name))
 				}
 			}
 		}
