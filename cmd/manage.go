@@ -71,7 +71,7 @@ var manageCommand = &cli.Command{
 		&cli.Int64Flag{
 			Name:    ImageWorker,
 			Aliases: []string{"w"},
-			Value:   4,
+			Value:   1,
 			Usage:   "number of sync worker",
 			EnvVars: []string{GenerateEnvFlags(ImageWorker)},
 		},
@@ -85,18 +85,21 @@ var manageCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:    MetaEndpoint,
 			Aliases: []string{"m"},
+			Value:   "",
 			Usage:   "endpoint for images metadata",
 			EnvVars: []string{GenerateEnvFlags(MetaEndpoint)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryUser,
 			Aliases: []string{"u"},
+			Value:   "",
 			Usage:   "docker registry user",
 			EnvVars: []string{GenerateEnvFlags(RegistryUser)},
 		},
 		&cli.StringFlag{
 			Name:    RegistryPassword,
 			Aliases: []string{"p"},
+			Value:   "",
 			Usage:   "docker registry password",
 			EnvVars: []string{GenerateEnvFlags(RegistryPassword)},
 		},

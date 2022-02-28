@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,7 +19,7 @@ const (
 	DOCKER = "docker"
 )
 
-var loadLock sync.Mutex
+//var loadLock sync.Mutex
 
 type Handler struct {
 	baseFolder   string
@@ -66,6 +65,7 @@ func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker
 }
 
 func (h *Handler) StartLoop() {
+	// 1. Create a mirror of the instance
 	err := h.pushImageLoadTask()
 	if err != nil {
 		h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
@@ -82,6 +82,11 @@ func (h *Handler) StartLoop() {
 			err := h.pushImageLoadTask()
 			if err != nil {
 				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
+			}
+			// Perform a delete operation on a stopped instance
+			delErr := h.lxdClient.DeleteStopInstances("")
+			if delErr != nil {
+				log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
 			}
 		case _, ok := <-h.closeCh:
 			if !ok {
@@ -145,40 +150,19 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 			}
 		case <-readyCh:
 			i := <-h.imageCh
+			//loadLock.Lock()
 			h.logger.Info(fmt.Sprintf("start to download image %s", i.Name))
-			loadLock.Lock()
 			puller, err := h.GetImagePuller(i)
-			loadLock.Unlock()
 			if err != nil {
+				//loadLock.Unlock()
 				h.logger.Error(err.Error())
 				readyCh <- true
 				continue
 			}
-			loadLock.Lock()
 			puller.DownloadImage(ctx, readyCh)
-			loadLock.Unlock()
+			//loadLock.Unlock()
 		}
 	}
-}
-
-func InitImageDetail() ([]ImageDetail, error) {
-	// images initialization
-	var imageResponse LXDImageResponse
-	imagesList := []string{
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-vm-x86:latest",
-		"swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler20.03-lts-sp2-container-x86:latest",
-	}
-	for _, image := range imagesList {
-		ide := ImageDetail{}
-		ide.Name = image
-		ide.Type = SWR
-		imageResponse.Images = append(imageResponse.Images, ide)
-	}
-	//ide := ImageDetail{}
-	//ide.Name = "swr.ap-southeast-1.myhuaweicloud.com/opensourceway/playground-images/openeuler-20.03-sp2-container-x86:latest"
-	//ide.Type = DOCKER
-	//imageResponse.Images = append(imageResponse.Images, ide)
-	return imageResponse.Images, nil
 }
 
 func (h *Handler) pushImageLoadTask() error {

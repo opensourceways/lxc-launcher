@@ -9,6 +9,7 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"lxc-launcher/common"
 	"lxc-launcher/log"
 	"lxc-launcher/util"
 	"os"
@@ -22,6 +23,11 @@ const (
 	ACTION_STOP       = "stop"
 	ACTION_START      = "start"
 	SOURCE_TYPE_IMAGE = "image"
+	STATUS_STOPPED    = "Stopped"
+)
+
+const (
+	DEL_STOPPED_TIME = 6 * 3600
 )
 
 type ResourceLimit struct {
@@ -81,7 +87,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 	if len(egressLimit) != 0 {
 		if strings.HasSuffix(egressLimit, "kbit") || strings.HasSuffix(
 			egressLimit, "Mbit") || strings.HasSuffix(
-				egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
+			egressLimit, "Gbit") || strings.HasSuffix(egressLimit, "Tbit") {
 			c.DeviceLimits[deviceName]["limits.egress"] = egressLimit
 		} else if strings.HasSuffix(egressLimit, "k") || strings.HasSuffix(
 			egressLimit, "M") || strings.HasSuffix(
@@ -100,7 +106,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 			c.DeviceLimits[deviceName]["limits.ingress"] = ingressLimit
 		} else if strings.HasSuffix(egressLimit, "k") || strings.HasSuffix(
 			ingressLimit, "M") || strings.HasSuffix(
-				ingressLimit, "G") || strings.HasSuffix(ingressLimit, "T") {
+			ingressLimit, "G") || strings.HasSuffix(ingressLimit, "T") {
 			c.DeviceLimits[deviceName]["limits.ingress"] = fmt.Sprintf("%sbit", ingressLimit)
 		} else {
 			return errors.New(fmt.Sprintf(
@@ -475,4 +481,28 @@ func (c *Client) GetInstanceStatus(name string) (string, error) {
 		return "", err
 	}
 	return instance.Status, nil
+}
+
+func (c *Client) DeleteStopInstances(instanceType string) error {
+	// 1. Query the status of an existing instance
+	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("Query instance failed, err: %v, "+
+			"instanceType: %v", err, instanceType))
+		return err
+	}
+	// 2. Perform a delete operation on a stopped instance
+	if len(instances) > 0 {
+		for _, instance := range instances {
+			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
+			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
+				_, err := c.instServer.DeleteInstance(instance.Name)
+				if err != nil {
+					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
+						"err: %v, name: %v", err, instance.Name))
+				}
+			}
+		}
+	}
+	return nil
 }

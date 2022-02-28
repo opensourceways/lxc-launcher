@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"github.com/urfave/cli/v2"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"lxc-launcher/log"
 	"lxc-launcher/lxd"
 	"lxc-launcher/network"
 	"lxc-launcher/task"
 	"lxc-launcher/util"
-	"lxc-launcher/log"
 	"net"
 	"net/http"
 	"time"
@@ -326,7 +326,7 @@ func launchStatusHandler(w http.ResponseWriter, req *http.Request) {
 func handleLaunch(c *cli.Context) error {
 	var err error
 	var ipaddress string
-	// create and wait instance ready
+	// 1. create and wait instance ready
 	if err = createInstance(c); err != nil {
 		return err
 	}
