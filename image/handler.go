@@ -57,7 +57,7 @@ func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker
 		metaEndpoint: metaEndpoint,
 		worker:       worker,
 		syncInterval: syncInterval,
-		imageCh:      make(chan ImageDetail, worker*4),
+		imageCh:      make(chan ImageDetail, worker*32),
 		closeCh:      make(chan bool, 1),
 		lxdClient:    lxdClient,
 		logger:       logger,
@@ -167,7 +167,6 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 
 func (h *Handler) pushImageLoadTask() error {
 	images, err := h.retrieveImages()
-	//images, err := InitImageDetail()
 	if err != nil {
 		log.Logger.Error(fmt.Sprintln("h.retrieveImages, err: ", err))
 		return err
