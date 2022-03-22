@@ -492,6 +492,7 @@ func (c *Client) GetInstanceStatus(name string) (string, error) {
 }
 
 func (c *Client) DeleteStopInstances(instanceType string) error {
+	log.Logger.Info(fmt.Sprintf("--------------------here1------------------------%v",1))
 	// 1. Query the status of an existing instance
 	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
 	if err != nil {
@@ -499,7 +500,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
-	log.Logger.Info(fmt.Sprintf("--------------------here------------------------"))
+	log.Logger.Info(fmt.Sprintf("--------------------here2------------------------"))
 	podConf, confErr := GetResConfig("conf")
 	if confErr == nil {
 		// creates the clientset
