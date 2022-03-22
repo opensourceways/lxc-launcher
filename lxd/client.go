@@ -499,16 +499,20 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
+	log.Logger.Info(fmt.Sprintf("--------------------here------------------------"))
 	podConf, confErr := GetResConfig("conf")
 	if confErr == nil {
 		// creates the clientset
-		clientset, _ := kubernetes.NewForConfig(podConf)
+		clientset, cliErr := kubernetes.NewForConfig(podConf)
+		log.Logger.Error(fmt.Sprintf("cliErr:%v", cliErr))
 		// access the API to list pods
 		pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
 		if podErr == nil {
 			for _, pod := range pods.Items {
 				fmt.Printf("There are %d pods in the cluster\n, %v", pod.Name, pod)
 			}
+		} else {
+			log.Logger.Error(fmt.Sprintf("podErr:%v", podErr))
 		}
 	}
 
