@@ -1,6 +1,9 @@
 package lxd
 
 import (
+	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	cli "github.com/lxc/lxd/client"
@@ -9,10 +12,15 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"lxc-launcher/common"
 	"lxc-launcher/log"
 	"lxc-launcher/util"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -491,6 +499,19 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
+	podConf, confErr := GetResConfig("conf")
+	if confErr == nil {
+		// creates the clientset
+		clientset, _ := kubernetes.NewForConfig(podConf)
+		// access the API to list pods
+		pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
+		if podErr == nil {
+			for _, pod := range pods.Items {
+				fmt.Printf("There are %d pods in the cluster\n, %v", pod.Name, pod)
+			}
+		}
+	}
+
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
 		for _, instance := range instances {
@@ -505,4 +526,70 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 		}
 	}
 	return nil
+}
+
+func CreateDir(dir string) error {
+	_, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			os.Mkdir(dir, 0777)
+		}
+	}
+	return err
+}
+
+func EncryptMd5(str string) string {
+	if str == "" {
+		return str
+	}
+	sum := md5.Sum([]byte(str))
+	return fmt.Sprintf("%x", sum)
+}
+
+func FileExists(path string) (bool) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
+}
+
+func DelFile(filex string) {
+	if FileExists(filex) {
+		err := os.Remove(filex)
+		if err != nil {
+			log.Logger.Error(fmt.Sprintf("err: %v", err))
+		}
+	}
+}
+
+func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
+	CreateDir(dirPath)
+	podConfig := os.Getenv("POD_CONFIG")
+	fileName := EncryptMd5(podConfig) + ".json"
+	filePath := filepath.Join(dirPath, fileName)
+	if FileExists(filePath) {
+		DelFile(filePath)
+	}
+	f, ferr := os.Create(filePath)
+	if ferr != nil {
+		return resConfig, ferr
+	}
+	defer DelFile(filePath)
+	defer f.Close()
+	data, baseErr := base64.StdEncoding.DecodeString(podConfig)
+	if baseErr == nil {
+		f.Write(data)
+	} else {
+		return resConfig, baseErr
+	}
+	resConfig, err = clientcmd.BuildConfigFromFlags("", filePath)
+	if err != nil {
+		log.Logger.Error(fmt.Sprintf("err: %v", err))
+		return
+	}
+	return
 }
