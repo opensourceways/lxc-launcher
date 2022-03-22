@@ -65,6 +65,7 @@ func NewImageHandler(username, password, baseFolder, metaEndpoint string, worker
 }
 
 func (h *Handler) StartLoop() {
+	log.Logger.Info(fmt.Sprintln("--------------------here4------------------------"))
 	// 1. Create a mirror of the instance
 	err := h.pushImageLoadTask()
 	if err != nil {
@@ -79,7 +80,7 @@ func (h *Handler) StartLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			log.Logger.Info(fmt.Sprintf("--------------------here0------------------------%v",0))
+			log.Logger.Info(fmt.Sprintln("--------------------here0------------------------"))
 			// Perform a delete operation on a stopped instance
 			delErr := h.lxdClient.DeleteStopInstances("")
 			if delErr != nil {
@@ -134,6 +135,7 @@ func (h *Handler) GetImagePuller(detail ImageDetail) (*Puller, error) {
 }
 
 func (h *Handler) pullingImage(index int, closeCh chan bool) {
+	log.Logger.Info(fmt.Sprintln("--------------------here5------------------------"))
 	ctx, cancel := context.WithCancel(context.Background())
 	readyCh := make(chan bool, 1)
 	readyCh <- true
@@ -169,7 +171,7 @@ func (h *Handler) pullingImage(index int, closeCh chan bool) {
 }
 
 func (h *Handler) pushImageLoadTask() error {
-	log.Logger.Info(fmt.Sprintf("--------------------here3------------------------%v",3))
+	log.Logger.Info(fmt.Sprintln("--------------------here3------------------------"))
 	images, err := h.retrieveImages()
 	if err != nil {
 		log.Logger.Error(fmt.Sprintln("h.retrieveImages, err: ", err))
