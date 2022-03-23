@@ -503,6 +503,10 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 		instanceList := make([]api.Instance, len(instances))
 		for _, instance := range instances {
 			log.Logger.Info(fmt.Sprintln("****************instance.Name: ", instance.Name))
+			err = c.StopInstance(instance.Name, true)
+			if err != nil {
+				continue
+			}
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
 				_, err := c.instServer.DeleteInstance(instance.Name)
@@ -514,10 +518,6 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			} else {
 				log.Logger.Info(fmt.Sprintln("instance.Name: ", instance.Name))
 				instanceList = append(instanceList, instance)
-				err = c.StopInstance(instance.Name, true)
-				if err != nil {
-					return err
-				}
 			}
 		}
 		if len(instanceList) > 0 {
