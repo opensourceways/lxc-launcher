@@ -84,7 +84,7 @@ func (h *Handler) StartLoop() {
 				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
 			}
 			// Perform a delete operation on a stopped instance
-			delErr := h.lxdClient.DeleteStopInstances("container")
+			delErr := h.lxdClient.DeleteStopInstances("")
 			if delErr != nil {
 				log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
 			}

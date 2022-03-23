@@ -494,8 +494,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 	// 1. Query the status of an existing instance
 	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Query instance failed, err: %v, "+
-			"instanceType: %v", err, instanceType))
+		log.Logger.Error(fmt.Sprintln("Query instance failed, err: ", err, "instanceType: ", instanceType))
 		return err
 	}
 	log.Logger.Info(fmt.Sprintln("instances: ", instances))
@@ -503,17 +502,17 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 	if len(instances) > 0 {
 		instanceList := make([]api.Instance, len(instances))
 		for _, instance := range instances {
-			log.Logger.Info(fmt.Sprintf("****************instance.Name: %v", instance.Name))
+			log.Logger.Info(fmt.Sprintln("****************instance.Name: ", instance.Name))
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
 				_, err := c.instServer.DeleteInstance(instance.Name)
 				if err != nil {
-					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
-						"err: %v, name: %v", err, instance.Name))
+					log.Logger.Error(fmt.Sprintln("Failed to delete stopped instance, "+
+						"err: ", err, ", name: ", instance.Name))
 					instanceList = append(instanceList)
 				}
 			} else {
-				log.Logger.Info(fmt.Sprintf("instance.Name: %v", instance.Name))
+				log.Logger.Info(fmt.Sprintln("instance.Name: ", instance.Name))
 				instanceList = append(instanceList, instance)
 			}
 		}
@@ -523,21 +522,21 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			if confErr == nil {
 				// creates the clientset
 				clientset, cliErr := kubernetes.NewForConfig(podConf)
-				log.Logger.Error(fmt.Sprintf("cliErr:%v", cliErr))
+				log.Logger.Error(fmt.Sprintln("cliErr:", cliErr))
 				// access the API to list pods
 				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
 				if podErr == nil {
 					for _, pod := range pods.Items {
 						if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
-							log.Logger.Info(fmt.Sprintf("pod.Name: %v", pod.Name))
+							log.Logger.Info(fmt.Sprintln("pod.Name: ", pod.Name))
 							podList = append(podList, pod.Name)
 						}
 					}
 				} else {
-					log.Logger.Error(fmt.Sprintf("podErr:%v", podErr))
+					log.Logger.Error(fmt.Sprintln("podErr:", podErr))
 				}
 			} else {
-				log.Logger.Error(fmt.Sprintf("confErr:%v", confErr))
+				log.Logger.Error(fmt.Sprintln("confErr:", confErr))
 			}
 			for _, instancex := range instanceList {
 				isExist := false
@@ -552,7 +551,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				if !isExist {
 					err = c.StopInstance(instancex.Name, true)
 					if err != nil {
-						log.Logger.Error(fmt.Sprintf("StopInstance, err:%v", err))
+						log.Logger.Error(fmt.Sprintln("StopInstance, err:", err))
 						return err
 					}
 				}
@@ -603,7 +602,6 @@ func DelFile(filex string) {
 func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	CreateDir(dirPath)
 	podConfig := os.Getenv("POD_CONFIG")
-	log.Logger.Info(fmt.Sprintf("podConfig: %v", podConfig))
 	fileName := EncryptMd5(podConfig) + ".json"
 	filePath := filepath.Join(dirPath, fileName)
 	if FileExists(filePath) {
@@ -611,7 +609,7 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	}
 	f, ferr := os.Create(filePath)
 	if ferr != nil {
-		log.Logger.Error(fmt.Sprintf("ferr: %v", ferr))
+		log.Logger.Error(fmt.Sprintln("Create, ferr: ", ferr))
 		return resConfig, ferr
 	}
 	defer DelFile(filePath)
@@ -621,7 +619,7 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	}
 	resConfig, err = clientcmd.BuildConfigFromFlags("", filePath)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("err: %v", err))
+		log.Logger.Error(fmt.Sprintln("BuildConfigFromFlags, err: ", err))
 		return
 	}
 	return
