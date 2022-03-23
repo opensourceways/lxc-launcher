@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
-	"lxc-launcher/log"
 	"lxc-launcher/lxd"
 	"lxc-launcher/util"
 	"net/http"
@@ -318,7 +317,7 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 		p.logger.Info(fmt.Sprintf("Data exists, no need to download repeatedly %s:%s ,successfully finished", p.imageName, p.imageTag))
 	}
 	remoteDigest, _ = p.getImageManifestDigest(ctx)
-	log.Logger.Info(fmt.Sprintln("The current digest value is, remoteDigest: ", remoteDigest, ",localDigest: ", localDigest))
+	p.logger.Info(fmt.Sprintln("The current digest value is, remoteDigest: ", remoteDigest, ",localDigest: ", localDigest))
 	//load images into lxd
 	err := p.loadLXDImages()
 	if err != nil {
