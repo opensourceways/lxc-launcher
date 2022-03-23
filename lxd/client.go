@@ -509,11 +509,15 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				if err != nil {
 					log.Logger.Error(fmt.Sprintln("Failed to delete stopped instance, "+
 						"err: ", err, ", name: ", instance.Name))
-					instanceList = append(instanceList)
+					instanceList = append(instanceList, instance)
 				}
 			} else {
 				log.Logger.Info(fmt.Sprintln("instance.Name: ", instance.Name))
 				instanceList = append(instanceList, instance)
+				err = c.StopInstance(instance.Name, true)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		if len(instanceList) > 0 {
@@ -530,6 +534,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
 				if podErr == nil {
 					for _, pod := range pods.Items {
+						log.Logger.Info(fmt.Sprintln("pod.Name: ", pod.Name, pod.ClusterName, pod.Status,pod.GenerateName))
 						if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
 							log.Logger.Info(fmt.Sprintln("pod.Name: ", pod.Name))
 							podList = append(podList, pod.Name)
@@ -556,7 +561,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				if !isExist {
 					err = c.StopInstance(instancex.Name, true)
 					if err != nil {
-						log.Logger.Error(fmt.Sprintln("StopInstance, err:", err))
+						log.Logger.Error(fmt.Sprintln(err))
 						return err
 					}
 				}
