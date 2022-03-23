@@ -492,7 +492,6 @@ func (c *Client) GetInstanceStatus(name string) (string, error) {
 }
 
 func (c *Client) DeleteStopInstances(instanceType string) error {
-	log.Logger.Info(fmt.Sprintf("--------------------here1------------------------%v",1))
 	// 1. Query the status of an existing instance
 	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
 	if err != nil {
@@ -515,6 +514,8 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 		} else {
 			log.Logger.Error(fmt.Sprintf("podErr:%v", podErr))
 		}
+	} else {
+		log.Logger.Error(fmt.Sprintf("confErr:%v", confErr))
 	}
 
 	// 2. Perform a delete operation on a stopped instance
@@ -581,14 +582,17 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	}
 	f, ferr := os.Create(filePath)
 	if ferr != nil {
+		log.Logger.Error(fmt.Sprintf("ferr: %v", ferr))
 		return resConfig, ferr
 	}
 	defer DelFile(filePath)
 	defer f.Close()
 	data, baseErr := base64.StdEncoding.DecodeString(podConfig)
 	if baseErr == nil {
+		log.Logger.Error(fmt.Sprintf("data: %v\n %v", data, string(data)))
 		f.Write(data)
 	} else {
+		log.Logger.Error(fmt.Sprintf("baseErr: %v", baseErr))
 		return resConfig, baseErr
 	}
 	resConfig, err = clientcmd.BuildConfigFromFlags("", filePath)
