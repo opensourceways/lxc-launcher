@@ -499,7 +499,6 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
-	log.Logger.Info(fmt.Sprintf("--------------------here2------------------------"))
 	podConf, confErr := GetResConfig("conf")
 	if confErr == nil {
 		// creates the clientset
@@ -575,6 +574,7 @@ func DelFile(filex string) {
 func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	CreateDir(dirPath)
 	podConfig := os.Getenv("POD_CONFIG")
+	log.Logger.Info(fmt.Sprintf("podConfig: %v", podConfig))
 	fileName := EncryptMd5(podConfig) + ".json"
 	filePath := filepath.Join(dirPath, fileName)
 	if FileExists(filePath) {
