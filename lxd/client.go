@@ -3,7 +3,6 @@ package lxd
 import (
 	"context"
 	"crypto/md5"
-	"encoding/json"
 	"errors"
 	"fmt"
 	cli "github.com/lxc/lxd/client"
@@ -499,26 +498,9 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
-	podConf, confErr := GetResConfig("conf")
-	if confErr == nil {
-		// creates the clientset
-		clientset, cliErr := kubernetes.NewForConfig(podConf)
-		log.Logger.Error(fmt.Sprintf("cliErr:%v", cliErr))
-		// access the API to list pods
-		pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
-		if podErr == nil {
-			for _, pod := range pods.Items {
-				fmt.Printf("There are %d pods in the cluster\n, %v", pod.Name, pod)
-			}
-		} else {
-			log.Logger.Error(fmt.Sprintf("podErr:%v", podErr))
-		}
-	} else {
-		log.Logger.Error(fmt.Sprintf("confErr:%v", confErr))
-	}
-
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
+		instanceList := make([]string, len(instances))
 		for _, instance := range instances {
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
@@ -526,6 +508,51 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				if err != nil {
 					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
 						"err: %v, name: %v", err, instance.Name))
+					instanceList = append(instanceList, instance.Name)
+				}
+			} else {
+				log.Logger.Info(fmt.Sprintf("instance.Name: %v", instance.Name))
+				instanceList = append(instanceList, instance.Name)
+			}
+		}
+		if len(instanceList) > 0 {
+			podList := make([]string, 0)
+			podConf, confErr := GetResConfig("conf")
+			if confErr == nil {
+				// creates the clientset
+				clientset, cliErr := kubernetes.NewForConfig(podConf)
+				log.Logger.Error(fmt.Sprintf("cliErr:%v", cliErr))
+				// access the API to list pods
+				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
+				if podErr == nil {
+					for _, pod := range pods.Items {
+						if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
+							log.Logger.Info(fmt.Sprintf("pod.Name: %v", pod.Name))
+							podList = append(podList, pod.Name)
+						}
+					}
+				} else {
+					log.Logger.Error(fmt.Sprintf("podErr:%v", podErr))
+				}
+			} else {
+				log.Logger.Error(fmt.Sprintf("confErr:%v", confErr))
+			}
+			for _, inName := range instanceList {
+				isExist := false
+				if len(podList) > 0 {
+					for _, podName := range podList {
+						if strings.Contains(podName, inName) {
+							isExist = true
+							break
+						}
+					}
+				}
+				if !isExist {
+					_, err := c.instServer.DeleteInstance(inName)
+					if err != nil {
+						log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
+							"err: %v, name: %v", err, inName))
+					}
 				}
 			}
 		}
@@ -587,13 +614,8 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	}
 	defer DelFile(filePath)
 	defer f.Close()
-	data, baseErr := json.Marshal(podConfig)
-	if baseErr == nil {
-		log.Logger.Error(fmt.Sprintf("data: %v\n %v", data, string(data)))
+	if len(podConfig) > 0 {
 		f.Write([]byte(podConfig))
-	} else {
-		log.Logger.Error(fmt.Sprintf("baseErr: %v", baseErr))
-		return resConfig, baseErr
 	}
 	resConfig, err = clientcmd.BuildConfigFromFlags("", filePath)
 	if err != nil {
