@@ -522,7 +522,10 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			if confErr == nil {
 				// creates the clientset
 				clientset, cliErr := kubernetes.NewForConfig(podConf)
-				log.Logger.Error(fmt.Sprintln("cliErr:", cliErr))
+				if cliErr != nil {
+					log.Logger.Error(fmt.Sprintln("cliErr:", cliErr))
+					return cliErr
+				}
 				// access the API to list pods
 				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
 				if podErr == nil {
@@ -534,9 +537,11 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 					}
 				} else {
 					log.Logger.Error(fmt.Sprintln("podErr:", podErr))
+					return podErr
 				}
 			} else {
 				log.Logger.Error(fmt.Sprintln("confErr:", confErr))
+				return confErr
 			}
 			for _, instancex := range instanceList {
 				isExist := false
