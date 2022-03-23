@@ -590,7 +590,7 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	data, baseErr := json.Marshal(podConfig)
 	if baseErr == nil {
 		log.Logger.Error(fmt.Sprintf("data: %v\n %v", data, string(data)))
-		f.Write(data)
+		f.Write([]byte(podConfig))
 	} else {
 		log.Logger.Error(fmt.Sprintf("baseErr: %v", baseErr))
 		return resConfig, baseErr
