@@ -501,7 +501,7 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 	log.Logger.Info(fmt.Sprintln("instances: ", instances))
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
-		instanceList := make([]string, len(instances))
+		instanceList := make([]api.Instance, len(instances))
 		for _, instance := range instances {
 			log.Logger.Info(fmt.Sprintf("****************instance.Name: %v", instance.Name))
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
@@ -510,11 +510,11 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 				if err != nil {
 					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
 						"err: %v, name: %v", err, instance.Name))
-					instanceList = append(instanceList, instance.Name)
+					instanceList = append(instanceList)
 				}
 			} else {
 				log.Logger.Info(fmt.Sprintf("instance.Name: %v", instance.Name))
-				instanceList = append(instanceList, instance.Name)
+				instanceList = append(instanceList, instance)
 			}
 		}
 		if len(instanceList) > 0 {
@@ -539,21 +539,21 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			} else {
 				log.Logger.Error(fmt.Sprintf("confErr:%v", confErr))
 			}
-			for _, inName := range instanceList {
+			for _, instancex := range instanceList {
 				isExist := false
 				if len(podList) > 0 {
 					for _, podName := range podList {
-						if strings.Contains(podName, inName) {
+						if strings.Contains(podName, instancex.Name) {
 							isExist = true
 							break
 						}
 					}
 				}
 				if !isExist {
-					_, err := c.instServer.DeleteInstance(inName)
+					err = c.StopInstance(instancex.Name, true)
 					if err != nil {
-						log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
-							"err: %v, name: %v", err, inName))
+						log.Logger.Error(fmt.Sprintf("StopInstance, err:%v", err))
+						return err
 					}
 				}
 			}
