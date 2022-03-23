@@ -79,17 +79,15 @@ func (h *Handler) StartLoop() {
 	for {
 		select {
 		case <-ticker.C:
+			err := h.pushImageLoadTask()
+			if err != nil {
+				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
+			}
 			// Perform a delete operation on a stopped instance
 			delErr := h.lxdClient.DeleteStopInstances("")
 			if delErr != nil {
 				log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
 			}
-
-			err := h.pushImageLoadTask()
-			if err != nil {
-				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
-			}
-
 		case _, ok := <-h.closeCh:
 			if !ok {
 				h.logger.Info("image handler received close event, quiting..")

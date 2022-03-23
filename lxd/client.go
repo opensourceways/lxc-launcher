@@ -498,10 +498,12 @@ func (c *Client) DeleteStopInstances(instanceType string) error {
 			"instanceType: %v", err, instanceType))
 		return err
 	}
+	log.Logger.Info(fmt.Sprintln("instances: ", instances))
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
 		instanceList := make([]string, len(instances))
 		for _, instance := range instances {
+			log.Logger.Info(fmt.Sprintf("****************instance.Name: %v", instance.Name))
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
 				_, err := c.instServer.DeleteInstance(instance.Name)
