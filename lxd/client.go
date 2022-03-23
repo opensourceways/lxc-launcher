@@ -3,7 +3,7 @@ package lxd
 import (
 	"context"
 	"crypto/md5"
-	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	cli "github.com/lxc/lxd/client"
@@ -587,7 +587,7 @@ func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
 	}
 	defer DelFile(filePath)
 	defer f.Close()
-	data, baseErr := base64.StdEncoding.DecodeString(podConfig)
+	data, baseErr := json.Marshal(podConfig)
 	if baseErr == nil {
 		log.Logger.Error(fmt.Sprintf("data: %v\n %v", data, string(data)))
 		f.Write(data)
