@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
-	"lxc-launcher/cmd"
 	"lxc-launcher/log"
 	"lxc-launcher/lxd"
 	"net/http"
@@ -85,11 +84,7 @@ func (h *Handler) StartLoop() {
 				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
 			}
 			// Perform a delete operation on a stopped instance
-			delErr := h.lxdClient.DeleteStopInstances(cmd.InstanceType)
-			if delErr != nil {
-				log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
-			}
-			delErr = h.lxdClient.DeleteStopInstances("container")
+			delErr := h.lxdClient.DeleteStopInstances("container")
 			if delErr != nil {
 				log.Logger.Error(fmt.Sprintf("delErr: %v", delErr))
 			}
