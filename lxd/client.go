@@ -1,6 +1,8 @@
 package lxd
 
 import (
+	"context"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	cli "github.com/lxc/lxd/client"
@@ -9,10 +11,15 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"lxc-launcher/common"
 	"lxc-launcher/log"
 	"lxc-launcher/util"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -341,14 +348,15 @@ func (c *Client) GetInstanceState(name string) (*api.InstanceState, error) {
 
 func (c *Client) StopInstance(name string, alsoDelete bool) error {
 	c.logger.Info(fmt.Sprintf("start to delete instance %s", name))
-	instance, etag, err := c.instServer.GetInstance(name)
+	//instance, etag, err := c.instServer.GetInstance(name)
+	instance, etag, err := c.instServer.GetInstanceState(name)
 	if err != nil {
 		return err
 	}
-	if instance.Status == STATUS_RUNNING {
+	if instance.Status != ACTION_STOP {
 		req := api.InstanceStatePut{
 			Action:   ACTION_STOP,
-			Timeout:  -1,
+			Timeout:  60,
 			Force:    true,
 			Stateful: false,
 		}
@@ -419,7 +427,7 @@ func (c *Client) CheckManageImageByAlias(alias string) (bool, error) {
 func (c *Client) DeleteImageAlias(alias string) error {
 	delImageErr := c.instServer.DeleteImageAlias(alias)
 	if delImageErr != nil {
-		log.Logger.Error(fmt.Sprint("delImageErr %s", delImageErr))
+		c.logger.Error(fmt.Sprint("delImageErr %s", delImageErr))
 		return delImageErr
 	}
 	return nil
@@ -428,7 +436,7 @@ func (c *Client) DeleteImageAlias(alias string) error {
 func (c *Client) CreateImage(imageApi api.ImagesPost, imageAlias cli.ImageCreateArgs) (op cli.Operation, err error) {
 	op, err = c.instServer.CreateImage(imageApi, &imageAlias)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("createImageErr %s", err))
+		c.logger.Error(fmt.Sprintf("createImageErr %s", err))
 	}
 	return
 }
@@ -441,7 +449,7 @@ func (c *Client) CreateImageAlias(alias api.ImageAliasesPost) (err error) {
 func (c *Client) GetImages() (images []api.Image, err error) {
 	images, err = c.instServer.GetImages()
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+		c.logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
 	}
 	return
 }
@@ -449,7 +457,7 @@ func (c *Client) GetImages() (images []api.Image, err error) {
 func (c *Client) GetOperation(uuid string) (op *api.Operation, ETag string, err error) {
 	aliasValue, ETag, err := c.instServer.GetOperation(uuid)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintln("alias: ", aliasValue, "ETag:", ETag, "err: ", err))
+		c.logger.Error(fmt.Sprintln("alias: ", aliasValue, "ETag:", ETag, "err: ", err))
 	}
 	return aliasValue, ETag, err
 }
@@ -457,7 +465,7 @@ func (c *Client) GetOperation(uuid string) (op *api.Operation, ETag string, err 
 func (c *Client) DeleteImage(fingerprint string) (op cli.Operation, err error) {
 	op, err = c.instServer.DeleteImage(fingerprint)
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Failed to delete mirror, err: %v", err))
+		c.logger.Error(fmt.Sprintf("Failed to delete mirror, err: %v", err))
 	}
 	return
 }
@@ -483,26 +491,135 @@ func (c *Client) GetInstanceStatus(name string) (string, error) {
 	return instance.Status, nil
 }
 
-func (c *Client) DeleteStopInstances(instanceType string) error {
+func (c *Client) DeleteInstances(instanceType string) error {
 	// 1. Query the status of an existing instance
 	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
 	if err != nil {
-		log.Logger.Error(fmt.Sprintf("Query instance failed, err: %v, "+
-			"instanceType: %v", err, instanceType))
+		c.logger.Error(fmt.Sprintln("Query instance failed, err: ", err, "instanceType: ", instanceType))
 		return err
 	}
 	// 2. Perform a delete operation on a stopped instance
 	if len(instances) > 0 {
+		instanceList := make([]api.Instance, len(instances))
 		for _, instance := range instances {
 			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
-				_, err := c.instServer.DeleteInstance(instance.Name)
+				err = c.StopInstance(instance.Name, true)
 				if err != nil {
-					log.Logger.Error(fmt.Sprintf("Failed to delete stopped instance, "+
-						"err: %v, name: %v", err, instance.Name))
+					c.logger.Error(fmt.Sprintln("Failed to delete stopped instance, "+
+						"err: ", err, ", name: ", instance.Name))
+					instanceList = append(instanceList, instance)
+				}
+			} else {
+				instanceList = append(instanceList, instance)
+			}
+		}
+		if len(instanceList) > 0 {
+			podList := make([]string, 0)
+			podConf, confErr := GetResConfig("conf")
+			if confErr == nil {
+				// creates the clientset
+				clientset, cliErr := kubernetes.NewForConfig(podConf)
+				if cliErr != nil {
+					c.logger.Error(fmt.Sprintln("cliErr:", cliErr))
+					return cliErr
+				}
+				// access the API to list pods
+				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
+				if podErr == nil {
+					for _, pod := range pods.Items {
+						c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name, pod.Status))
+						if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
+							c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name))
+							podList = append(podList, pod.Name)
+						}
+					}
+				} else {
+					c.logger.Error(fmt.Sprintln("podErr:", podErr))
+					//return podErr
+				}
+			} else {
+				c.logger.Error(fmt.Sprintln("confErr:", confErr))
+				return confErr
+			}
+			for _, instancex := range instanceList {
+				isExist := false
+				if len(podList) > 0 {
+					for _, podName := range podList {
+						if strings.Contains(podName, instancex.Name) {
+							isExist = true
+							break
+						}
+					}
+				}
+				if !isExist {
+					err = c.StopInstance(instancex.Name, true)
+					if err != nil {
+						c.logger.Error(fmt.Sprintln("StopInstance, err: ", err))
+						//return err
+					}
 				}
 			}
 		}
 	}
 	return nil
+}
+
+func CreateDir(dir string) error {
+	_, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			os.Mkdir(dir, 0777)
+		}
+	}
+	return err
+}
+
+func EncryptMd5(str string) string {
+	if str == "" {
+		return str
+	}
+	sum := md5.Sum([]byte(str))
+	return fmt.Sprintf("%x", sum)
+}
+
+func FileExists(path string) (bool) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
+}
+
+func DelFile(filex string) {
+	if FileExists(filex) {
+		err := os.Remove(filex)
+		if err != nil {
+			log.Logger.Error(fmt.Sprintf("err: %v", err))
+		}
+	}
+}
+
+func GetResConfig(dirPath string) (resConfig *rest.Config, err error) {
+	CreateDir(dirPath)
+	podConfig := os.Getenv("POD_CONFIG")
+	fileName := EncryptMd5(podConfig) + ".json"
+	filePath := filepath.Join(dirPath, fileName)
+	if FileExists(filePath) {
+		DelFile(filePath)
+	}
+	f, ferr := os.Create(filePath)
+	if ferr != nil {
+		return resConfig, ferr
+	}
+	defer DelFile(filePath)
+	defer f.Close()
+	if len(podConfig) > 0 {
+		f.Write([]byte(podConfig))
+	}
+	resConfig, err = clientcmd.BuildConfigFromFlags("", filePath)
+	return
 }
