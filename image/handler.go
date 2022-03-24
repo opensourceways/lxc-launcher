@@ -85,7 +85,7 @@ func (h *Handler) StartLoop() {
 			// Perform a delete operation on a stopped instance
 			delErr := h.lxdClient.DeleteInstances("")
 			if delErr != nil {
-				h.logger.Error(fmt.Sprintf("delErr: %s", delErr))
+				fmt.Println("delErr: ", delErr)
 			}
 		case _, ok := <-h.closeCh:
 			if !ok {

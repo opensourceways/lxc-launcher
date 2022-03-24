@@ -353,7 +353,7 @@ func (c *Client) StopInstance(name string, alsoDelete bool) error {
 	if err != nil {
 		return err
 	}
-	if instance.Status != ACTION_STOP {
+	if instance.StatusCode != api.Stopped || instance.Status != ACTION_STOP {
 		req := api.InstanceStatePut{
 			Action:   ACTION_STOP,
 			Timeout:  60,
@@ -361,12 +361,17 @@ func (c *Client) StopInstance(name string, alsoDelete bool) error {
 			Stateful: false,
 		}
 		op, err := c.instServer.UpdateInstanceState(name, req, etag)
-		if err != nil {
-			return err
-		}
-		err = op.Wait()
-		if err != nil {
-			return err
+		if err == nil {
+			err = op.Wait()
+			if err != nil {
+				if !alsoDelete {
+					return err
+				}
+			}
+		} else {
+			if !alsoDelete {
+				return err
+			}
 		}
 	}
 	if alsoDelete {
@@ -506,8 +511,8 @@ func (c *Client) DeleteInstances(instanceType string) error {
 			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
 				err = c.StopInstance(instance.Name, true)
 				if err != nil {
-					c.logger.Error(fmt.Sprintln("Failed to delete stopped instance, "+
-						"err: ", err, ", name: ", instance.Name))
+					fmt.Println("Failed to delete stopped instance, "+
+						"err: ", err, ", name: ", instance.Name)
 					instanceList = append(instanceList, instance)
 				}
 			} else {
@@ -555,7 +560,7 @@ func (c *Client) DeleteInstances(instanceType string) error {
 				if !isExist {
 					err = c.StopInstance(instancex.Name, true)
 					if err != nil {
-						c.logger.Error(fmt.Sprintln("StopInstance, err: ", err))
+						fmt.Println("err: ", err)
 						//return err
 					}
 				}
