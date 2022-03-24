@@ -1,8 +1,6 @@
 package common
 
 import (
-	"fmt"
-	"lxc-launcher/log"
 	"strings"
 	"time"
 )
@@ -28,8 +26,6 @@ func TimeStrToInt(timeStr string) int64 {
 	if err == nil {
 		unixTime := theTime.Unix()
 		return unixTime
-	} else {
-		log.Logger.Error(fmt.Sprintf("err: %v", err))
 	}
 	return 0
 }
