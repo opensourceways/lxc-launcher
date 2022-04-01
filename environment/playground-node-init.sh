@@ -13,10 +13,11 @@ fi
 # yum update and install
 ##yum clean all && yum update -y && yum makecache
 if hash snap 2>/dev/null;then
-	yum remove snapd -y && yum install snapd -y
-	systemctl enable --now snapd.socket
-	ln -s /var/lib/snapd/snap /snap
+	yum remove snapd -y 
 fi
+yum install snapd -y
+systemctl enable --now snapd.socket
+ln -s /var/lib/snapd/snap /snap
 
 echo "#############################################################################################"
 # lxd install
