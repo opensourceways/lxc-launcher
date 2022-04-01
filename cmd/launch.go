@@ -38,6 +38,7 @@ const (
 	InstanceType     = "instance-type"
 	InstanceProfiles = "instance-profiles"
 	CPUResource      = "cpu-resource"
+	ProcessResource  = "process-resource"
 	MemoryResource   = "memory-resource"
 	StoragePool      = "storage-pool"
 	RootSize         = "root-size"
@@ -106,6 +107,13 @@ var launchCommand = &cli.Command{
 			Value:   "",
 			Usage:   "CPU limitation of lxc instance",
 			EnvVars: []string{GenerateEnvFlags(CPUResource)},
+		},
+		&cli.StringFlag{
+			Name:    ProcessResource,
+			Aliases: []string{"rp"},
+			Value:   "50",
+			Usage:   "Process limitation of lxc instance",
+			EnvVars: []string{GenerateEnvFlags(ProcessResource)},
 		},
 		&cli.StringFlag{
 			Name:    MemoryResource,
@@ -237,7 +245,7 @@ func validateLaunch(c *cli.Context) error {
 	if err = lxdClient.ValidateResourceLimit(
 		c.String(NetworkEgress), c.String(NetworkIngress), c.String(RootSize),
 		c.String(StoragePool), c.String(MemoryResource), c.String(CPUResource), c.StringSlice(AdditionalConfig),
-		c.String(DeviceName)); err != nil {
+		c.String(DeviceName), c.String(ProcessResource)); err != nil {
 		return err
 	}
 	log.Logger.Info(fmt.Sprintf("start to check image %s existence", lxcImage))
@@ -310,7 +318,7 @@ func CleanupLaunch() {
 			log.Logger.Error(fmt.Sprintf("failed to clean up lxd instance %s, %s", instName, err))
 		}
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(15 * time.Second)
 }
 
 func launchStatusHandler(w http.ResponseWriter, req *http.Request) {
