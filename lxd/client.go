@@ -170,6 +170,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 			}
 			if core >= 1 {
 				c.Configs["limits.cpu"] = fmt.Sprintf("%d", int(core))
+				c.Configs["limits.processes"] = processLimit
 			} else if core < 1 && core > 0 {
 				c.Configs["limits.cpu"] = "1"
 				c.Configs["limits.cpu.allowance"] = fmt.Sprintf("%0.0f%%", float64(core)*100)
