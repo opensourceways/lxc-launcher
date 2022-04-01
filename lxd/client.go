@@ -88,7 +88,7 @@ func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *z
 }
 
 func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, storagePool, memoryResource,
-	cpuResource string, additionalConfig []string, deviceName string) error {
+	cpuResource string, additionalConfig []string, deviceName string, processLimit string) error {
 	//egress limitation
 	c.DeviceLimits[deviceName] = map[string]string{}
 	if len(egressLimit) != 0 {
@@ -162,6 +162,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 		if strings.HasSuffix(cpuResource, "%") {
 			c.Configs["limits.cpu"] = "1"
 			c.Configs["limits.cpu.allowance"] = cpuResource
+			c.Configs["limits.processes"] = processLimit
 		} else {
 			core, err := strconv.ParseFloat(cpuResource, 64)
 			if err != nil {
@@ -172,6 +173,7 @@ func (c *Client) ValidateResourceLimit(egressLimit, ingressLimit, rootSize, stor
 			} else if core < 1 && core > 0 {
 				c.Configs["limits.cpu"] = "1"
 				c.Configs["limits.cpu.allowance"] = fmt.Sprintf("%0.0f%%", float64(core)*100)
+				c.Configs["limits.processes"] = processLimit
 			} else {
 				return errors.New("cpu core must be greater than 0")
 			}
