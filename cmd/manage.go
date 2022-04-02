@@ -134,7 +134,6 @@ func validateManage(c *cli.Context) error {
 		log.Logger.Error(fmt.Sprintln("lxd.NewClient, err: ", err))
 		return err
 	}
-
 	//if c.Bool(ExitWhenUnready) {
 	//	fmt.Println("Currently waiting for the system to be prepared")
 	//	return nil
