@@ -83,9 +83,11 @@ func (h *Handler) StartLoop() {
 				h.logger.Warn(fmt.Sprintf("unable to list image details %s", err))
 			}
 			// Perform a delete operation on a stopped instance
-			delErr := h.lxdClient.DeleteInstances("")
-			if delErr != nil {
-				fmt.Println("delErr: ", delErr)
+			if h.lxdClient != nil {
+				delErr := h.lxdClient.DeleteInstances("")
+				if delErr != nil {
+					fmt.Println("delErr: ", delErr)
+				}
 			}
 		case _, ok := <-h.closeCh:
 			if !ok {
