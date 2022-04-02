@@ -76,7 +76,7 @@ func NewClient(socket, server, clientKeyPath, clientSecretPath string, logger *z
 			TLSClientKey:       string(keyData),
 		})
 	}
-	if err != nil {
+	if err != nil || instServer == nil {
 		return nil, errors.New(fmt.Sprintf("failed to connect lxd server via socket file, %s", err))
 	}
 	return &Client{
@@ -442,9 +442,13 @@ func (c *Client) DeleteImageAlias(alias string) error {
 }
 
 func (c *Client) CreateImage(imageApi api.ImagesPost, imageAlias cli.ImageCreateArgs) (op cli.Operation, err error) {
-	op, err = c.instServer.CreateImage(imageApi, &imageAlias)
-	if err != nil {
-		c.logger.Error(fmt.Sprintf("createImageErr %s", err))
+	if c != nil && c.instServer != nil {
+		op, err = c.instServer.CreateImage(imageApi, &imageAlias)
+		if err != nil {
+			c.logger.Error(fmt.Sprintf("createImageErr %s", err))
+		}
+	} else {
+		err = errors.New("c.instServer is nil")
 	}
 	return
 }
@@ -455,9 +459,13 @@ func (c *Client) CreateImageAlias(alias api.ImageAliasesPost) (err error) {
 }
 
 func (c *Client) GetImages() (images []api.Image, err error) {
-	images, err = c.instServer.GetImages()
-	if err != nil {
-		c.logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+	if c != nil && c.instServer != nil {
+		images, err = c.instServer.GetImages()
+		if err != nil {
+			c.logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+		}
+	} else {
+		err = errors.New("c.instServer is nil")
 	}
 	return
 }
@@ -471,9 +479,11 @@ func (c *Client) GetOperation(uuid string) (op *api.Operation, ETag string, err 
 }
 
 func (c *Client) DeleteImage(fingerprint string) (op cli.Operation, err error) {
-	op, err = c.instServer.DeleteImage(fingerprint)
-	if err != nil {
-		c.logger.Error(fmt.Sprintf("Failed to delete mirror, err: %v", err))
+	if c != nil && c.instServer != nil {
+		op, err = c.instServer.DeleteImage(fingerprint)
+		if err != nil {
+			c.logger.Error(fmt.Sprintf("Failed to delete mirror, err: %v", err))
+		}
 	}
 	return
 }
@@ -501,75 +511,78 @@ func (c *Client) GetInstanceStatus(name string) (string, error) {
 
 func (c *Client) DeleteInstances(instanceType string) error {
 	// 1. Query the status of an existing instance
-	instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
-	if err != nil {
-		c.logger.Error(fmt.Sprintln("Query instance failed, err: ", err, "instanceType: ", instanceType))
-		return err
-	}
-	// 2. Perform a delete operation on a stopped instance
-	if len(instances) > 0 {
-		instanceList := make([]api.Instance, len(instances))
-		for _, instance := range instances {
-			timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
-			if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
-				err = c.StopInstance(instance.Name, true)
-				if err != nil {
-					fmt.Println("Failed to delete stopped instance, "+
-						"err: ", err, ", name: ", instance.Name)
-					instanceList = append(instanceList, instance)
-				}
-			} else {
-				instanceList = append(instanceList, instance)
-			}
+	if c != nil && c.instServer != nil {
+		instances, err := c.instServer.GetInstances(api.InstanceType(instanceType))
+		if err != nil {
+			c.logger.Error(fmt.Sprintln("Query instance failed, err: ", err, "instanceType: ", instanceType))
+			return err
 		}
-		if len(instanceList) > 0 {
-			podList := make([]string, 0)
-			podConf, confErr := GetResConfig("conf")
-			if confErr == nil {
-				// creates the clientset
-				clientset, cliErr := kubernetes.NewForConfig(podConf)
-				if cliErr != nil {
-					c.logger.Error(fmt.Sprintln("cliErr:", cliErr))
-					return cliErr
-				}
-				// access the API to list pods
-				pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
-				if podErr == nil {
-					for _, pod := range pods.Items {
-						c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name, pod.Status))
-						if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
-							c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name))
-							podList = append(podList, pod.Name)
-						}
+		// 2. Perform a delete operation on a stopped instance
+		if len(instances) > 0 {
+			instanceList := make([]api.Instance, len(instances))
+			for _, instance := range instances {
+				timeInt := common.TimeStrToInt(instance.LastUsedAt.String()) + 8*3600
+				if (common.TimeStrToInt(common.GetCurTime())-timeInt > DEL_STOPPED_TIME) && (instance.Status == STATUS_STOPPED) {
+					err = c.StopInstance(instance.Name, true)
+					if err != nil {
+						fmt.Println("Failed to delete stopped instance, "+
+							"err: ", err, ", name: ", instance.Name)
+						instanceList = append(instanceList, instance)
 					}
 				} else {
-					c.logger.Error(fmt.Sprintln("podErr:", podErr))
-					//return podErr
+					instanceList = append(instanceList, instance)
 				}
-			} else {
-				c.logger.Error(fmt.Sprintln("confErr:", confErr))
-				return confErr
 			}
-			for _, instancex := range instanceList {
-				isExist := false
-				if len(podList) > 0 {
-					for _, podName := range podList {
-						if strings.Contains(podName, instancex.Name) {
-							isExist = true
-							break
+			if len(instanceList) > 0 {
+				podList := make([]string, 0)
+				podConf, confErr := GetResConfig("conf")
+				if confErr == nil {
+					// creates the clientset
+					clientset, cliErr := kubernetes.NewForConfig(podConf)
+					if cliErr != nil {
+						c.logger.Error(fmt.Sprintln("cliErr:", cliErr))
+						return cliErr
+					}
+					// access the API to list pods
+					pods, podErr := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
+					if podErr == nil {
+						for _, pod := range pods.Items {
+							c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name, pod.Status))
+							if len(pod.Name) > 0 && strings.HasPrefix(pod.Name, "res") {
+								c.logger.Info(fmt.Sprintln("pod.Name: ", pod.Name))
+								podList = append(podList, pod.Name)
+							}
+						}
+					} else {
+						c.logger.Error(fmt.Sprintln("podErr:", podErr))
+						//return podErr
+					}
+				} else {
+					c.logger.Error(fmt.Sprintln("confErr:", confErr))
+					return confErr
+				}
+				for _, instancex := range instanceList {
+					isExist := false
+					if len(podList) > 0 {
+						for _, podName := range podList {
+							if strings.Contains(podName, instancex.Name) {
+								isExist = true
+								break
+							}
 						}
 					}
-				}
-				if !isExist {
-					err = c.StopInstance(instancex.Name, true)
-					if err != nil {
-						fmt.Println("err: ", err)
-						//return err
+					if !isExist {
+						err = c.StopInstance(instancex.Name, true)
+						if err != nil {
+							fmt.Println("err: ", err)
+							//return err
+						}
 					}
 				}
 			}
 		}
 	}
+
 	return nil
 }
 

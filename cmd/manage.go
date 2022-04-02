@@ -131,9 +131,9 @@ func validateManage(c *cli.Context) error {
 	}
 	if lxdClient, err = lxd.NewClient(c.String(LXDSocket), serverAddress,
 		c.String(ClientKeyPath), c.String(ClientCertPath), log.Logger); err != nil && c.Bool(ExitWhenUnready) {
+		log.Logger.Error(fmt.Sprintln("lxd.NewClient, err: ", err))
 		return err
 	}
-
 	//if c.Bool(ExitWhenUnready) {
 	//	fmt.Println("Currently waiting for the system to be prepared")
 	//	return nil
@@ -141,6 +141,9 @@ func validateManage(c *cli.Context) error {
 
 	imageHandler, err = image.NewImageHandler(c.String(RegistryUser), c.String(RegistryPassword), dataFolder,
 		c.String(MetaEndpoint), c.Int64(ImageWorker), c.Int64(SyncInterval), lxdClient, log.Logger)
+	if err != nil {
+		log.Logger.Error(fmt.Sprintln("image.NewImageHandler, err: ", err))
+	}
 	return nil
 }
 
