@@ -221,9 +221,6 @@ func (p *Puller) DownloadImage(ctx context.Context, finishedCh chan bool) {
 	defer func() {
 		finishedCh <- true
 	}()
-	if p.lxdClient == nil {
-		return
-	}
 	// Delete unused images
 	p.DeleteInvalidImages()
 	isExist := false

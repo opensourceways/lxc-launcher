@@ -455,9 +455,11 @@ func (c *Client) CreateImageAlias(alias api.ImageAliasesPost) (err error) {
 }
 
 func (c *Client) GetImages() (images []api.Image, err error) {
-	images, err = c.instServer.GetImages()
-	if err != nil {
-		c.logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+	if c != nil && c.instServer != nil {
+		images, err = c.instServer.GetImages()
+		if err != nil {
+			c.logger.Error(fmt.Sprintf("Failed to get the mirror list, err: %v", err))
+		}
 	}
 	return
 }

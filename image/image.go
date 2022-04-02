@@ -143,13 +143,15 @@ func (p *Puller) DeleteInvalidImages() {
 		p.logger.Error(fmt.Sprintf("getErr: %v", getErr))
 		return
 	}
-	for _, image := range images {
-		if len(image.Aliases) == 0 {
-			op, opErr := p.lxdClient.DeleteImage(image.Fingerprint)
-			if opErr != nil {
-				p.logger.Error(fmt.Sprintf("p.lxdClient.DeleteImage, Failed to delete mirror, opErr: %v", opErr))
-			} else {
-				p.logger.Info(fmt.Sprintln("Mirror deleted successfully, op: ", op))
+	if len(images) > 0 {
+		for _, image := range images {
+			if len(image.Aliases) == 0 && len(image.Fingerprint) > 0 {
+				op, opErr := p.lxdClient.DeleteImage(image.Fingerprint)
+				if opErr != nil {
+					p.logger.Error(fmt.Sprintf("p.lxdClient.DeleteImage, Failed to delete mirror, opErr: %v", opErr))
+				} else {
+					p.logger.Info(fmt.Sprintln("Mirror deleted successfully, op: ", op))
+				}
 			}
 		}
 	}
