@@ -1,0 +1,9 @@
+# copy context to ECS command for auto excute, this not shell script;
+cat > ./init.sh <<EOF
+#!/bin/bash
+rm -rf ./lxc-launcher
+yum install -y git  && git clone https://github.com/dakangsiji/lxc-launcher.git
+cd ./lxc-launcher/environment/
+/bin/bash ./playground-node-init.sh
+EOF
+/bin/bash ./init.sh
