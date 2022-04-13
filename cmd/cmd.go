@@ -1,9 +1,11 @@
 package cmd
 
 import (
-	"github.com/urfave/cli/v2"
-	"lxc-launcher/log"
 	"time"
+
+	"lxc-launcher/log"
+
+	"github.com/urfave/cli/v2"
 )
 
 var RootCmd = &cli.App{
@@ -22,6 +24,7 @@ responsible for lxc instance lifecycle management as well as the network proxy`,
 	Commands: []*cli.Command{
 		launchCommand,
 		manageCommand,
+		loadCommand,
 	},
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
