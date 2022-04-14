@@ -20,7 +20,7 @@ const (
 var loadCommand = &cli.Command{
 	Name:    "load",
 	Aliases: []string{"l"},
-	Usage:   "Manage lxc images and lxc orphans:launcher manage <data-folder>",
+	Usage:   "Add an instance of LXD to load the syntax of a single image:launcher load <load-image> <data-folder>",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:    LXDSocket,
