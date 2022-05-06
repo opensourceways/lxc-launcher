@@ -22,7 +22,7 @@ ln -s /var/lib/snapd/snap /snap
 echo "#############################################################################################"
 # lxd install
 echo "plaese wait,installing lxd........."
-sleep 5
+sleep 3
 if ! hash lxd 2>/dev/null;then
 	snap install lxd > /dev/null
 	if [ $? -ne 0 ];then
@@ -54,11 +54,17 @@ fi
 echo "#############################################################################################"
 # lxd config
 str=`ip add | grep "eth0" | tail -1 | awk '{print $2}'`
-sed -i "s/ip_add/${str%/*}/g" ./lxd.config
+sed -i "s#core.https_address:.*#core.https_address: ${str%/*}:8443#g" ./lxd.config
+## you shoud replace "/dev/vdc" to use the pool device,and modify the device name in lxd.config to keep up with;
 if [ -e /dev/vdc ];then
         wipefs -f -a /dev/vdc
 fi
+if [ `lxc storage list | wc -l` -gt 3 ];then
+	echo "lxc pool shoud be delete"
+	lxc storage delete default
+fi
 lxd init --preseed < ./lxd.config
+lxc profile set default security.secureboot=false
 if [ $? -ne 0 ];then
         echo "lxd init faild"
         exit
@@ -103,12 +109,6 @@ echo "##########################################################################
 # check lxc config
 lxc info
 sleep 3
-# rm -f ./{cert.crt,lxd.config}
-# if [ -e ./cert.crt ] || [ -e ./lxd.config ];then
-#         echo "files not delete"
-#         exit
-# fi
-# rm -f $0
 rm -rf ../../{lxc-launcher,init.sh}
 systemctl disable sshd 
 systemctl stop sshd
