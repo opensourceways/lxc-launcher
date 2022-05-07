@@ -5,9 +5,9 @@
 
 echo "#############################################################################################"
 # check files
-if [ ! -e ./cert.crt ] || [ ! -e ./lxd.config ];then
+if [ ! -e ./cert.crt ] || [ ! -e ./lxd-container.config ] || [ ! -e ./lxd-vm.config ];then
 	echo "miss init files"
-        exit
+    exit
 fi
 
 # yum update and install
@@ -22,7 +22,7 @@ ln -s /var/lib/snapd/snap /snap
 echo "#############################################################################################"
 # lxd install
 echo "plaese wait,installing lxd........."
-sleep 3
+sleep 2
 if ! hash lxd 2>/dev/null;then
 	snap install lxd > /dev/null
 	if [ $? -ne 0 ];then
@@ -35,7 +35,7 @@ if ! hash lxd 2>/dev/null;then
 			# "snap install lxd --channel=latest/stable > /dev/null" ;
 			snap install lxd 
 			if [ $? -ne 0 ];then
-				sleep 3
+				sleep 1
 				continue
 			else
 				echo "snap install succeeded"
@@ -55,16 +55,23 @@ echo "##########################################################################
 # lxd config
 str=`ip add | grep "eth0" | tail -1 | awk '{print $2}'`
 sed -i "s#core.https_address:.*#core.https_address: ${str%/*}:8443#g" ./lxd.config
-## you shoud replace "/dev/vdc" to use the pool device,and modify the device name in lxd.config to keep up with;
+## you shoud replace "/dev/vdc" with the pool device name, and modify the device name in lxd.config to keep up with;
 if [ -e /dev/vdc ];then
         wipefs -f -a /dev/vdc
 fi
 if [ `lxc storage list | wc -l` -gt 3 ];then
-	echo "lxc pool shoud be delete"
+	echo "lxc default pool is : default; the default pool will be delete"	
 	lxc storage delete default
 fi
-lxd init --preseed < ./lxd.config
-lxc profile set default security.secureboot=false
+if [ `lshw -class system | grep -i virtual` -eq 0 ];then
+	echo "virtual arch building"
+	str="container"
+	lxd init --preseed < ./lxd-container.config
+else
+	echo "machine arch building"
+	lxd init --preseed < ./lxd-vm.config
+	lxc profile set default security.secureboot=false
+fi
 if [ $? -ne 0 ];then
         echo "lxd init faild"
         exit
@@ -89,8 +96,10 @@ ebtables -I INPUT 1 -p ip -i veth+ -j input_secure
 ebtables -A ip_isolate -p ip -i veth+ --ip-src 10.205.172.1/24 --ip-dst 10.205.172.1 -j ACCEPT
 ebtables -A ip_isolate -p ip -i veth+ --ip-src 10.205.172.1 --ip-dst 10.205.172.1/24 -j ACCEPT
 ebtables -A ip_isolate -p ip -i veth+ --ip-src 10.205.172.1/24 --ip-dst 10.205.172.1/24 -j DROP
-ebtables -A input_secure -p ipv4 -i veth+ --ip-dst 169.254.0.0/16 --ip-proto tcp -j DROP
 ebtables -A input_secure -j RETURN
+if [ $str = "container" ];then
+	ebtables -A input_secure -p ipv4 -i veth+ --ip-dst 169.254.0.0/16 --ip-proto tcp -j DROP
+fi
 # arp rules
 ebtables -N flood_secure
 ebtables -P flood_secure DROP
@@ -108,12 +117,11 @@ fi
 echo "#############################################################################################"
 # check lxc config
 lxc info
-sleep 3
 rm -rf ../../{lxc-launcher,init.sh}
 systemctl disable sshd 
 systemctl stop sshd
 systemctl stop systemd-tmpfiles-clean.timer
 systemctl disable systemd-tmpfiles-clean.timer
-echo "init finish,system will be reboot...,you can use 【crtl+c】 cancel reboot in 3 seconds"
-sleep 3
+echo "init finish,system will be reboot...,you can use 【crtl+c】 cancel reboot in 5 seconds"
+sleep 5
 /usr/sbin/reboot
