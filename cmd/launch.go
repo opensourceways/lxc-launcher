@@ -245,7 +245,7 @@ func validateLaunch(c *cli.Context) error {
 	if err = lxdClient.ValidateResourceLimit(
 		c.String(NetworkEgress), c.String(NetworkIngress), c.String(RootSize),
 		c.String(StoragePool), c.String(MemoryResource), c.String(CPUResource), c.StringSlice(AdditionalConfig),
-		c.String(DeviceName), c.String(ProcessResource)); err != nil {
+		c.String(DeviceName), c.String(ProcessResource), c.String(InstanceType)); err != nil {
 		return err
 	}
 	log.Logger.Info(fmt.Sprintf("start to check image %s existence", lxcImage))
