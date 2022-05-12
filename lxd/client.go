@@ -224,6 +224,11 @@ func (c *Client) ApplyResourceLimit(name string, instEnvs []string) error {
 	}
 	req := api.InstancePut{
 		Config: util.MergeConfigs(instance.Config, c.Configs),
+		Profiles: instance.Profiles,
+		Architecture: instance.Architecture,
+		Ephemeral: instance.Ephemeral,
+		Stateful: instance.Stateful,
+		Description: instance.Description,
 	}
 	//add environment if needed
 	if len(instEnvs) != 0 {
